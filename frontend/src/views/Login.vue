@@ -5,10 +5,24 @@
       <a-form layout="vertical" @submit.prevent="handleSubmit">
         <!-- Поля ввода (как было) -->
         <template v-if="!isLogin">
-           <a-row :gutter="16">
+           <!-- Выбор роли -->
+           <a-form-item label="Я регистрируюсь как:">
+             <a-radio-group v-model:value="form.role" button-style="solid">
+               <a-radio-button value="graduate">Студент</a-radio-button>
+               <a-radio-button value="employer">Работодатель</a-radio-button>
+             </a-radio-group>
+           </a-form-item>
+
+           <!-- Поля меняются в зависимости от роли -->
+           <a-row :gutter="16" v-if="form.role === 'graduate'">
              <a-col :span="12"><a-form-item label="Имя"><a-input v-model:value="form.first_name" /></a-form-item></a-col>
              <a-col :span="12"><a-form-item label="Фамилия"><a-input v-model:value="form.last_name" /></a-form-item></a-col>
            </a-row>
+
+           <a-form-item v-else label="Название компании (или ваше ФИО)">
+             <a-input v-model:value="form.first_name" placeholder="ООО Ромашка" />
+             <!-- Для работодателя используем first_name как временное хранилище названия -->
+           </a-form-item>
         </template>
 
         <a-form-item label="Email">
@@ -54,7 +68,7 @@ export default {
     return {
       isLogin: true,
       loading: false,
-      form: {email: '', password: '', first_name: '', last_name: ''}
+      form: {email: '', password: '', first_name: '', last_name: '', role: 'graduate'}
     }
   },
   mounted() {
@@ -92,11 +106,16 @@ export default {
           message.success('Вход выполнен');
 
           setTimeout(() => {
-             window.location.href = '/profile';
+             // Если роль работодатель -> идем в кабинет компании
+             if (r.data.user.role === 'employer') {
+                 window.location.href = '/employer';
+             } else {
+                 window.location.href = '/profile';
+             }
           }, 100);
 
         } else {
-          await api.post('/auth/registration', { ...this.form, role: 'graduate' });
+          await api.post('/auth/registration', { ...this.form, role: this.form.role });
           message.info('Письмо для подтверждения отправлено на почту!');
           this.isLogin = true;
         }

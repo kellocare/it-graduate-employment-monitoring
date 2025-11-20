@@ -9,4 +9,7 @@ router.post('/', authMiddleware, vacancyController.createVacancy);
 // Получить список
 router.get('/', vacancyController.getAll);
 
+router.get('/my', authMiddleware, vacancyController.getMyVacancies);
+router.delete('/:id', authMiddleware, vacancyController.deleteVacancy);
+
 module.exports = router;

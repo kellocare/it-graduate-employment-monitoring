@@ -5,6 +5,7 @@ import Home from './views/Home.vue'; // <--- Новый лендинг
 import Profile from './views/Profile.vue';
 import Vacancies from './views/Vacancies.vue';
 import Chat from './views/Chat.vue';
+import EmployerDashboard from './views/EmployerDashboard.vue';
 
 const routes = [
     { path: '/', component: Home }, // Главная теперь Home
@@ -13,6 +14,7 @@ const routes = [
     { path: '/profile', component: Profile },
     { path: '/vacancies', component: Vacancies },
     { path: '/chat', component: Chat },
+    { path: '/employer', component: EmployerDashboard },
 ];
 
 const router = createRouter({

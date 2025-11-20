@@ -22,7 +22,25 @@
       <form @submit.prevent="createVacancy">
         <div class="form-group">
           <label>Компания</label>
-          <a-select v-model:value="form.company_id" placeholder="Выберите компанию" style="width: 100%">
+
+          <!-- ВАРИАНТ 1: Если это Работодатель — показываем только текст (или disabled input) -->
+          <div v-if="user.role === 'employer'">
+             <a-input
+               v-if="employersCompany"
+               :value="employersCompany.name"
+               disabled
+               style="color: #333; font-weight: bold;"
+             />
+             <a-alert v-else message="Сначала создайте профиль компании в кабинете!" type="error" show-icon />
+          </div>
+
+          <!-- ВАРИАНТ 2: Если это Админ — даем выбор из списка -->
+          <a-select
+            v-else
+            v-model:value="form.company_id"
+            placeholder="Выберите компанию"
+            style="width: 100%"
+          >
             <a-select-option v-for="c in companies" :key="c.id" :value="c.id">{{ c.name }}</a-select-option>
           </a-select>
         </div>
@@ -174,6 +192,7 @@ export default {
       showTestModal: false,
       testLoading: false,
       submitting: false,
+      employersCompany: null,
 
       currentApplication: null,
       studentAnswers: [],
@@ -188,6 +207,16 @@ export default {
     if (userData) {
       this.user = JSON.parse(userData);
     }
+    if (this.user && this.user.role === 'employer') {
+       try {
+         const r = await api.get('/employer/company');
+         this.employersCompany = r.data;
+         // Автоматически выбираем его компанию в форме
+         if (this.employersCompany) {
+             this.form.company_id = this.employersCompany.id;
+         }
+       } catch (e) {}
+    }
     await Promise.all([this.loadVacancies(), this.loadCompanies()]);
   },
   methods: {
@@ -199,6 +228,12 @@ export default {
       try { const r = await api.get('/dict/companies'); this.companies = r.data; } catch (e) {}
     },
     async createVacancy() {
+      this.aiLoading = true;
+      if (this.user.role === 'employer' && !this.employersCompany) {
+          alert('Пожалуйста, заполните профиль компании в личном кабинете.');
+          this.$router.push('/employer');
+          return;
+      }
       this.aiLoading = true;
       try {
         await api.post('/vacancies', this.form);

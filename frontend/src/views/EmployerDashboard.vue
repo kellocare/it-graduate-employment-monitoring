@@ -1,0 +1,232 @@
+<template>
+  <div class="employer-page">
+    <div class="header">
+      <h1>🏢 Кабинет работодателя</h1>
+    </div>
+
+    <a-card class="main-card">
+      <a-tabs v-model:activeKey="activeTab">
+
+        <!-- Вкладка 1: Профиль -->
+        <a-tab-pane key="profile" tab="Профиль компании">
+          <div class="tab-content">
+            <a-alert v-if="!company.id" message="Внимание" description="Заполните профиль, чтобы создавать вакансии." type="warning" show-icon class="mb-20" />
+            <a-form layout="vertical" @submit.prevent="saveCompany">
+              <a-row :gutter="16">
+                <a-col :span="12"><a-form-item label="Название"><a-input v-model:value="company.name" /></a-form-item></a-col>
+                <a-col :span="12"><a-form-item label="ИНН"><a-input v-model:value="company.inn" /></a-form-item></a-col>
+              </a-row>
+              <a-row :gutter="16">
+                <a-col :span="12"><a-form-item label="Город"><a-input v-model:value="company.city" /></a-form-item></a-col>
+                <a-col :span="12"><a-form-item label="Сайт"><a-input v-model:value="company.website" /></a-form-item></a-col>
+              </a-row>
+              <a-form-item label="Описание"><a-textarea v-model:value="company.description" :rows="4" /></a-form-item>
+              <a-button type="primary" html-type="submit" :loading="loading"><save-outlined /> Сохранить профиль</a-button>
+            </a-form>
+          </div>
+        </a-tab-pane>
+
+        <!-- Вкладка 2: Вакансии -->
+        <a-tab-pane key="vacancies" tab="Мои вакансии" :disabled="!company.id">
+          <div class="tab-content">
+            <div class="flex-between mb-20">
+              <h3>Активные вакансии</h3>
+              <a-button type="primary" @click="$router.push('/vacancies')"><plus-outlined /> Создать новую</a-button>
+            </div>
+            <a-table :dataSource="vacancies" :columns="columns" rowKey="id">
+              <template #bodyCell="{ column, record }">
+                <template v-if="column.key === 'action'">
+                  <a-popconfirm title="Удалить?" @confirm="deleteVacancy(record.id)">
+                    <a-button danger size="small"><delete-outlined /></a-button>
+                  </a-popconfirm>
+                </template>
+                <template v-if="column.key === 'salary'">{{ record.salary_min ? `от ${record.salary_min} ₽` : 'По догов.' }}</template>
+                <template v-if="column.key === 'date'">{{ new Date(record.created_at).toLocaleDateString() }}</template>
+              </template>
+            </a-table>
+          </div>
+        </a-tab-pane>
+
+        <!-- Вкладка 3: Поиск Кандидатов (НОВОЕ) -->
+        <a-tab-pane key="candidates" tab="Поиск кандидатов" :disabled="!company.id">
+          <div class="tab-content">
+             <h3>🎓 Выпускники, ищущие работу</h3>
+             <p class="hint-text">ИИ проанализирует профили студентов и подскажет, насколько они подходят вашей компании.</p>
+
+             <div class="candidates-grid">
+                <a-card v-for="student in candidates" :key="student.id" class="candidate-card" hoverable>
+                  <a-card-meta :title="`${student.first_name} ${student.last_name}`">
+                    <template #avatar>
+                       <a-avatar :src="student.avatar_url ? `http://localhost:4000${student.avatar_url}` : null">
+                         <template #icon><user-outlined /></template>
+                       </a-avatar>
+                    </template>
+                    <template #description>
+                      <div class="spec-text">{{ student.specialty || 'Специальность не указана' }}</div>
+                    </template>
+                  </a-card-meta>
+
+                  <p class="bio">{{ student.about_me ? student.about_me.substring(0, 80) + '...' : 'Нет описания навыков' }}</p>
+
+                  <!-- Результат AI -->
+                  <div v-if="student.aiResult" class="ai-box">
+                    <div class="ai-score">
+                      Соответствие:
+                      <span :class="getScoreClass(student.aiResult.score)">{{ student.aiResult.score }}%</span>
+                    </div>
+                    <p class="ai-reason">{{ student.aiResult.reason }}</p>
+                  </div>
+
+                  <template #actions>
+                     <a-tooltip title="Спросить ИИ">
+                        <a-button type="dashed" size="small" @click="analyzeCandidate(student)" :loading="student.aiLoading">
+                          🤖 AI Анализ
+                        </a-button>
+                     </a-tooltip>
+                     <a-tooltip title="Отправить приглашение">
+                        <a-button type="primary" size="small" @click="openInvite(student)">
+                          📩 Пригласить
+                        </a-button>
+                     </a-tooltip>
+                  </template>
+                </a-card>
+             </div>
+          </div>
+        </a-tab-pane>
+
+      </a-tabs>
+    </a-card>
+  </div>
+</template>
+
+<script>
+import api from '../axios';
+import { message, Modal } from 'ant-design-vue';
+import { SaveOutlined, PlusOutlined, DeleteOutlined, UserOutlined } from '@ant-design/icons-vue';
+import { h } from 'vue'; // Для рендера в модалке
+
+export default {
+  components: { SaveOutlined, PlusOutlined, DeleteOutlined, UserOutlined },
+  data() {
+    return {
+      activeTab: 'profile',
+      loading: false,
+      company: { name: '', city: '', description: '', website: '', inn: '' },
+      vacancies: [],
+      candidates: [], // Список студентов
+      columns: [
+        { title: 'Должность', dataIndex: 'title', key: 'title' },
+        { title: 'Зарплата', key: 'salary' },
+        { title: 'Дата создания', key: 'date' },
+        { title: 'Действия', key: 'action' },
+      ]
+    };
+  },
+  async mounted() {
+    await this.loadCompany();
+    if (this.company.id) {
+      await this.loadMyVacancies();
+      await this.loadCandidates();
+    }
+  },
+  methods: {
+    async loadCompany() {
+      try {
+        const r = await api.get('/employer/company');
+        if (r.data) this.company = r.data;
+      } catch (e) {}
+    },
+    async loadMyVacancies() {
+      try {
+        const r = await api.get('/vacancies/my');
+        this.vacancies = r.data;
+      } catch (e) {}
+    },
+    async loadCandidates() {
+      try {
+        const r = await api.get('/candidates');
+        this.candidates = r.data.map(c => ({ ...c, aiLoading: false, aiResult: null }));
+      } catch (e) {}
+    },
+    async saveCompany() {
+      this.loading = true;
+      try {
+        const r = await api.post('/employer/company', this.company);
+        this.company = r.data;
+        message.success('Компания сохранена');
+        if (this.activeTab === 'profile') this.activeTab = 'vacancies';
+      } catch (e) { message.error('Ошибка'); } finally { this.loading = false; }
+    },
+    async deleteVacancy(id) {
+      try { await api.delete(`/vacancies/${id}`); await this.loadMyVacancies(); message.success('Удалено'); } catch (e) {}
+    },
+
+    // AI Анализ
+    async analyzeCandidate(student) {
+      student.aiLoading = true;
+      try {
+        const r = await api.post('/candidates/analyze', { candidate_id: student.id });
+        student.aiResult = r.data;
+      } catch (e) {
+        message.error('Ошибка анализа');
+      } finally {
+        student.aiLoading = false;
+      }
+    },
+
+    // Приглашение
+    openInvite(student) {
+      let msg = '';
+      Modal.confirm({
+        title: `Приглашение для ${student.first_name}`,
+        content: h('div', {}, [
+          h('p', 'Напишите сообщение студенту:'),
+          h('textarea', {
+             class: 'ant-input',
+             rows: 3,
+             placeholder: 'Приходите к нам на собеседование...',
+             onInput: (e) => { msg = e.target.value }
+          })
+        ]),
+        onOk: async () => {
+          if (!msg) return message.warning('Напишите сообщение');
+          try {
+            await api.post('/candidates/invite', { candidate_user_id: student.user_id, message: msg });
+            message.success('Приглашение отправлено!');
+          } catch(e) { message.error('Ошибка отправки'); }
+        }
+      });
+    },
+
+    getScoreClass(score) {
+      if (score >= 80) return 'score-high';
+      if (score >= 50) return 'score-mid';
+      return 'score-low';
+    }
+  }
+};
+</script>
+
+<style scoped>
+.employer-page { max-width: 1000px; margin: 30px auto; padding: 0 20px; }
+.header h1 { color: #2c3e50; margin-bottom: 20px; }
+.main-card { border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+.tab-content { padding: 10px 0; }
+.mb-20 { margin-bottom: 20px; }
+.flex-between { display: flex; justify-content: space-between; align-items: center; }
+
+/* Сетка кандидатов */
+.candidates-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; margin-top: 20px; }
+.candidate-card { border-radius: 10px; border: 1px solid #eee; }
+.spec-text { font-size: 0.85em; color: #888; margin-top: 2px; }
+.bio { font-size: 0.9em; color: #555; margin: 15px 0; height: 40px; overflow: hidden; }
+
+/* AI Результат */
+.ai-box { background: #f6ffed; border: 1px solid #b7eb8f; padding: 8px; border-radius: 6px; margin-bottom: 15px; font-size: 0.85em; }
+.ai-score { font-weight: bold; margin-bottom: 4px; }
+.score-high { color: #52c41a; }
+.score-mid { color: #fa8c16; }
+.score-low { color: #ff4d4f; }
+.ai-reason { margin: 0; color: #333; }
+.hint-text { color: #666; font-style: italic; }
+</style>

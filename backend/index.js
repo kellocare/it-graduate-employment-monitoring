@@ -11,6 +11,7 @@ const aiRouter = require('./routes/aiRoutes');
 const vacancyRouter = require('./routes/vacancyRoutes');
 const applicationRouter = require('./routes/applicationRoutes');
 const chatRouter = require('./routes/chatRoutes');
+const employerRouter = require('./routes/employerRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 4000; // Убедись, что тут или в .env стоит 4000
@@ -35,6 +36,11 @@ app.use('/api/ai', aiRouter);
 app.use('/api/vacancies', vacancyRouter);
 app.use('/api/applications', applicationRouter);
 app.use('/api/chat', chatRouter);
+app.use('/api/employer', employerRouter);
+app.use('/api/candidates', require('./routes/candidateRoutes'));
+app.use('/api/notifications', require('./routes/notificationRoutes'));
+app.use('/api/invites', require('./routes/inviteRoutes'));
+app.use('/api/messages', require('./routes/messagesRoutes'));
 
 
 app.get('/', (req, res) => {

@@ -83,6 +83,52 @@ class VacancyController {
             res.status(500).json({ message: 'Ошибка получения вакансий' });
         }
     }
+
+    // Получить вакансии только моей компании
+    async getMyVacancies(req, res) {
+        try {
+            const userId = req.user.id;
+
+            // Сначала узнаем ID компании этого юзера
+            const compRes = await db.query('SELECT id FROM companies WHERE user_id = $1', [userId]);
+
+            if (compRes.rows.length === 0) {
+                return res.json([]); // У юзера еще нет компании
+            }
+
+            const companyId = compRes.rows[0].id;
+
+            // Получаем вакансии
+            const vacancies = await db.query(`
+                SELECT * FROM vacancies 
+                WHERE company_id = $1 
+                ORDER BY created_at DESC
+            `, [companyId]);
+
+            res.json(vacancies.rows);
+        } catch (e) {
+            console.error(e);
+            res.status(500).json({ message: 'Ошибка получения списка вакансий' });
+        }
+    }
+
+    // Удаление вакансии (тоже пригодится)
+    async deleteVacancy(req, res) {
+        try {
+            const userId = req.user.id;
+            const vacancyId = req.params.id;
+
+            // Проверка: принадлежит ли вакансия компании этого юзера?
+            await db.query(`
+                DELETE FROM vacancies 
+                WHERE id = $1 AND company_id = (SELECT id FROM companies WHERE user_id = $2)
+            `, [vacancyId, userId]);
+
+            res.json({ message: 'Вакансия удалена' });
+        } catch (e) {
+             res.status(500).json({ message: 'Ошибка удаления' });
+        }
+    }
 }
 
 module.exports = new VacancyController();

@@ -48,18 +48,54 @@ class AiService {
         throw new Error("ИИ не отвечает. Попробуйте позже.");
     }
 
-    // ... МЕТОДЫ generateTestTasks, extractSkills и reviewTest ОСТАВЛЯЕМ БЕЗ ИЗМЕНЕНИЙ ...
-    // (Скопируй их из своего старого файла или прошлого моего ответа)
+    async calculateMatch(studentProfile, vacancyDescription) {
+        const prompt = `
+            Ты — профессиональный HR-аналитик.
+            
+            ПРОФИЛЬ КАНДИДАТА:
+            ${studentProfile}
+            
+            ОПИСАНИЕ ВАКАНСИИ / КОМПАНИИ:
+            ${vacancyDescription}
+            
+            Твоя задача:
+            1. Проанализируй, насколько кандидат подходит под требования.
+            2. Оцени релевантность от 0 до 100.
+            3. Напиши ОДНО короткое предложение с обоснованием.
+            
+            Верни СТРОГО JSON:
+            {
+                "score": 85,
+                "reason": "Отличное знание стека, но мало опыта в коммерческой разработке."
+            }
+        `;
 
-    // На всякий случай дублирую один метод, чтобы ты видел, что логика не меняется:
+        try {
+            // Используем тот же метод получения ответа, что и раньше
+            const result = await this.getCompletion([{ role: "user", content: prompt }]);
+
+            // Очистка от Markdown
+            const cleanJson = result.replace(/```json/g, '').replace(/```/g, '').trim();
+
+            // Попытка найти JSON в ответе
+            const match = cleanJson.match(/\{[\s\S]*\}/);
+            if (match) {
+                return JSON.parse(match[0]);
+            }
+            return JSON.parse(cleanJson);
+        } catch (e) {
+            console.error("AI Match Error:", e);
+            return { score: 0, reason: "Не удалось провести автоматический анализ." };
+        }
+    }
+
     async extractSkills(vacancyDescription) {
         const prompt = `Извлеки технические навыки (hard skills) из текста. Только список через запятую. Текст: "${vacancyDescription}"`;
         const result = await this.getCompletion([{ role: "user", content: prompt }]);
         return result;
     }
 
-    // Вставь сюда generateTestTasks и reviewTest из прошлого кода
-    // ...
+
     async generateTestTasks(vacancyTitle, vacancyDescription) {
         const prompt = `
             Ты — технический лид. Вакансия: "${vacancyTitle}". Описание: "${vacancyDescription}".
