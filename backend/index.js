@@ -4,6 +4,8 @@ const cors = require('cors');
 const db = require('./db');
 const authRouter = require('./routes/authRoutes');
 const graduateRouter = require('./routes/graduateRoutes');
+const dictionaryRouter = require('./routes/dictionaryRoutes');
+const employmentRouter = require('./routes/employmentRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 4000; // Убедись, что тут или в .env стоит 4000
@@ -18,6 +20,8 @@ app.use(express.json());
 
 app.use('/api/auth', authRouter);
 app.use('/api/graduates', graduateRouter);
+app.use('/api/dict', dictionaryRouter);
+app.use('/api/employment', employmentRouter);
 
 app.get('/', (req, res) => {
     res.json({ message: 'Server is working correctly!' });

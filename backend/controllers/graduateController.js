@@ -31,15 +31,20 @@ class GraduateController {
     async updateProfile(req, res) {
         try {
             const userId = req.user.id;
-            const { first_name, last_name, middle_name, graduation_year, portfolio_link } = req.body;
+            // Добавили specialty_id в список полей
+            const { first_name, last_name, middle_name, graduation_year, portfolio_link, specialty_id } = req.body;
 
             const updatedProfile = await db.query(
                 `UPDATE graduates 
-                 SET first_name = $1, last_name = $2, middle_name = $3, 
-                     graduation_year = $4, portfolio_link = $5
-                 WHERE user_id = $6
+                 SET first_name = $1, 
+                     last_name = $2, 
+                     middle_name = $3, 
+                     graduation_year = $4, 
+                     portfolio_link = $5,
+                     specialty_id = $6 
+                 WHERE user_id = $7
                  RETURNING *`,
-                [first_name, last_name, middle_name, graduation_year, portfolio_link, userId]
+                [first_name, last_name, middle_name, graduation_year, portfolio_link, specialty_id, userId]
             );
 
             res.json(updatedProfile.rows[0]);

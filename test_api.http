@@ -35,3 +35,24 @@ Content-Type: application/json
   "graduation_year": 2025,
   "portfolio_link": "https://github.com/kellocare"
 }
+
+### Получить список компаний
+GET http://127.0.0.1:4000/api/dict/companies
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6ImdyYWR1YXRlIiwiaWF0IjoxNzYzNjQ1MzMyLCJleHAiOjE3NjM3MzE3MzJ9.LIAy5jrn-bDj1BhYlnqh4QF0M1gBsAVIGoHydKvXwrk
+
+### Добавить запись о работе (Поменяй company_id на реальный, например 1)
+POST http://127.0.0.1:4000/api/employment
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6ImdyYWR1YXRlIiwiaWF0IjoxNzYzNjQ1MzMyLCJleHAiOjE3NjM3MzE3MzJ9.LIAy5jrn-bDj1BhYlnqh4QF0M1gBsAVIGoHydKvXwrk
+Content-Type: application/json
+
+{
+  "company_id": 1,
+  "position_title": "Junior Developer",
+  "start_date": "2025-01-10",
+  "salary_amount": 80000,
+  "is_current": true
+}
+
+### Посмотреть мои работы
+GET http://127.0.0.1:4000/api/employment
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6ImdyYWR1YXRlIiwiaWF0IjoxNzYzNjQ1MzMyLCJleHAiOjE3NjM3MzE3MzJ9.LIAy5jrn-bDj1BhYlnqh4QF0M1gBsAVIGoHydKvXwrk
