@@ -30,57 +30,75 @@ class ChatController {
                 [userId, 'user', message]
             );
 
-            // 2. Получаем список вакансий
+            // 2. Получаем список вакансий (контекст рынка)
             const vacanciesRes = await db.query(`
                 SELECT v.id, v.title, c.name as company, v.salary_min, v.description 
                 FROM vacancies v
                 JOIN companies c ON v.company_id = c.id
             `);
 
-            // Формируем контекст. Если вакансий нет, пишем "Список пуст".
             const vacanciesList = vacanciesRes.rows.map(v =>
-                `- ID ${v.id}: "${v.title}" в компании "${v.company}" (Стек из описания: ${v.description.substring(0, 100)}...)`
+                `- ID ${v.id}: "${v.title}" в "${v.company}" (${v.salary_min ? 'от ' + v.salary_min : 'з/п не указана'}). Описание: ${v.description.substring(0, 150)}...`
             ).join('\n');
-
             const vacanciesContext = vacanciesList.length > 0 ? vacanciesList : "В данный момент вакансий нет.";
 
-            // 3. Получаем историю
+            // 3. --- НОВОЕ: Получаем профиль студента (контекст личности) ---
+            const gradRes = await db.query(`
+                SELECT g.first_name, g.last_name, g.about_me, g.portfolio_links, s.name as specialty_name
+                FROM graduates g
+                LEFT JOIN specialties s ON g.specialty_id = s.id
+                WHERE g.user_id = $1
+            `, [userId]);
+
+            const student = gradRes.rows[0];
+            let studentInfo = "Данные о студенте не заполнены.";
+
+            if (student) {
+                // Формируем читаемый текст для ИИ
+                studentInfo = `Имя: ${student.first_name} ${student.last_name}\n`;
+                studentInfo += `Специальность: ${student.specialty_name || 'Не указана'}\n`;
+                studentInfo += `О себе (навыки, опыт): "${student.about_me || 'Не заполнено'}"\n`;
+
+                // Добавляем типы ссылок из портфолио (например, есть ли GitHub)
+                if (student.portfolio_links && Array.isArray(student.portfolio_links)) {
+                    const links = student.portfolio_links.map(l => l.type).join(', ');
+                    if (links) studentInfo += `Портфолио содержит ссылки на: ${links}`;
+                }
+            }
+
+            // 4. Получаем историю переписки
             const historyRes = await db.query(
                 'SELECT role, content FROM chat_messages WHERE user_id = $1 ORDER BY created_at DESC LIMIT 10',
                 [userId]
             );
             const recentHistory = historyRes.rows.reverse();
 
-            // 4. СОБИРАЕМ УЛУЧШЕННЫЙ ПРОМПТ
+            // 5. Собираем СУПЕР-ПРОМПТ
             const messagesForAi = [
                 {
                     role: "system",
-                    content: `Ты — карьерный консультант в IT-вузе.
+                    content: `Ты — карьерный консультант.
                     
-                    ВОТ СПИСОК РЕАЛЬНЫХ ВАКАНСИЙ НА НАШЕМ САЙТЕ:
+                    ИНФОРМАЦИЯ О СТУДЕНТЕ, С КОТОРЫМ ТЫ ОБЩАЕШЬСЯ:
+                    ${studentInfo}
+                    
+                    СПИСОК ДОСТУПНЫХ ВАКАНСИЙ:
                     ${vacanciesContext}
                     
-                    Твоя стратегия:
-                    1. Проанализируй навыки и интересы студента.
-                    2. Поищи в списке выше вакансию, которая ему подходит.
+                    Твоя задача:
+                    1. Используй информацию "О себе" студента, чтобы сразу предлагать релевантные вещи. Не спрашивай то, что уже написано в профиле (например, если он написал "Знаю Python", не спрашивай "Какой язык ты знаешь?").
+                    2. Если студент не заполнил поле "О себе", вежливо попроси рассказать о навыках.
+                    3. Рекомендуй вакансии из списка выше, если они подходят.
                     
-                    ПРАВИЛА ПОВЕДЕНИЯ:
-                    - Если нашел совпадение: Рекомендуй эту вакансию, укажи её ID и Название. Объясни, почему она подходит.
-                    - Если ПОДХОДЯЩЕЙ ВАКАНСИИ НЕТ (или список пуст):
-                      а) Честно скажи: "К сожалению, прямо сейчас в нашей базе нет вакансий под твой профиль".
-                      б) НЕ ПРЕДЛАГАЙ вакансии, которые не подходят (не предлагай Python-разработчику идти в HR).
-                      в) Вместо этого расскажи, кем обычно работают люди с такими навыками (примеры должностей в индустрии).
-                      г) Посоветуй следить за обновлениями на сайте ("Мониторь раздел Вакансии").
-                    
-                    Будь вежлив, краток и поддерживай студента.`
+                    Будь краток, полезен и профессионален.`
                 },
                 ...recentHistory.map(msg => ({ role: msg.role, content: msg.content }))
             ];
 
-            // 5. Спрашиваем ИИ
+            // 6. Спрашиваем ИИ
             const aiAnswer = await aiService.getCompletion(messagesForAi);
 
-            // 6. Сохраняем ответ
+            // 7. Сохраняем ответ
             const savedAiMsg = await db.query(
                 'INSERT INTO chat_messages (user_id, role, content) VALUES ($1, $2, $3) RETURNING *',
                 [userId, 'assistant', aiAnswer]

@@ -2,19 +2,22 @@ const { OpenAI } = require("openai");
 
 class AiService {
     constructor() {
-        // Инициализируем клиента.
-        // Если ключа нет, сервис не упадет сразу, но выдаст ошибку при попытке вызова.
         this.client = new OpenAI({
-            baseURL: "https://router.huggingface.co/v1",
-            apiKey: process.env.HF_TOKEN,
+            baseURL: "https://api.groq.com/openai/v1",
+            apiKey: process.env.GROQ_API_KEY,
         });
 
-        // Используем модель, которую ты указал, или запасную (Qwen часто хорош для русского)
-        this.model = "MiniMaxAI/MiniMax-M2:novita";
-        // Альтернатива, если MiniMax будет капризничать: "Qwen/Qwen2.5-72B-Instruct"
+        // БЫЛО: "llama3-70b-8192" (Устарела)
+
+        // СТАЛО: Самая новая и мощная модель на данный момент
+        this.model = "llama-3.3-70b-versatile";
+
+        // Если вдруг и она не пойдет, вот запасные варианты:
+        // "llama-3.1-70b-versatile"
+        // "mixtral-8x7b-32768"
     }
 
-    // Умный метод с повторными попытками
+    // Метод с повторными попытками (оставляем, это полезно)
     async getCompletion(messages) {
         let attempts = 0;
         const maxAttempts = 3;
@@ -24,47 +27,39 @@ class AiService {
                 const completion = await this.client.chat.completions.create({
                     model: this.model,
                     messages: messages,
-                    max_tokens: 1000,
-                    temperature: 0.7,
+                    // У Groq параметры немного другие, temperature можно оставить
+                    temperature: 0.6,
+                    max_tokens: 1024,
                 });
 
                 const content = completion.choices[0].message.content;
 
-                // Если ответ есть и он не пустой — возвращаем
                 if (content && content.trim().length > 0) {
                     return content;
                 }
-
-                console.warn(`AI attempt ${attempts + 1} returned empty response. Retrying...`);
-
+                console.warn(`AI attempt ${attempts + 1} returned empty response.`);
             } catch (error) {
                 console.error(`AI attempt ${attempts + 1} failed:`, error.message);
-                // Если ошибка 429 (Too Many Requests) или 503 — ждем немного
+                // Если ошибка 429 (лимит), Groq восстанавливается быстро
                 await new Promise(r => setTimeout(r, 2000));
             }
-
             attempts++;
         }
-
-        throw new Error("ИИ не отвечает после 3 попыток. Попробуйте позже.");
+        throw new Error("ИИ не отвечает. Попробуйте позже.");
     }
 
-    // Метод специально для извлечения навыков из вакансии
+    // ... МЕТОДЫ generateTestTasks, extractSkills и reviewTest ОСТАВЛЯЕМ БЕЗ ИЗМЕНЕНИЙ ...
+    // (Скопируй их из своего старого файла или прошлого моего ответа)
+
+    // На всякий случай дублирую один метод, чтобы ты видел, что логика не меняется:
     async extractSkills(vacancyDescription) {
-        const prompt = `
-            Твоя задача - извлечь технические навыки (hard skills) из текста вакансии.
-            
-            Текст: "${vacancyDescription}"
-            
-            Верни ТОЛЬКО список навыков через запятую. Не пиши никаких вводных слов, не используй маркеры списка.
-            Пример хорошего ответа: JavaScript, Node.js, PostgreSQL, Git, Docker
-            Пример плохого ответа: Из текста можно выделить: JavaScript, Git...
-        `;
-
+        const prompt = `Извлеки технические навыки (hard skills) из текста. Только список через запятую. Текст: "${vacancyDescription}"`;
         const result = await this.getCompletion([{ role: "user", content: prompt }]);
-        return result; // Возвращает строку "Skill1, Skill2, Skill3"
+        return result;
     }
 
+    // Вставь сюда generateTestTasks и reviewTest из прошлого кода
+    // ...
     async generateTestTasks(vacancyTitle, vacancyDescription) {
         const prompt = `
             Ты — технический лид. Вакансия: "${vacancyTitle}". Описание: "${vacancyDescription}".
@@ -72,66 +67,33 @@ class AiService {
             Верни ТОЛЬКО валидный JSON массив строк. Без Markdown.
             Пример: ["Вопрос 1", "Вопрос 2"]
         `;
-
         try {
             const result = await this.getCompletion([{ role: "user", content: prompt }]);
-            console.log("Raw AI response:", result);
-
-            // Очистка от Markdown (```json ... ```)
             const cleanResult = result.replace(/```json/g, '').replace(/```/g, '').trim();
-
-            // 1. Пробуем найти массив через регулярку
             const jsonMatch = cleanResult.match(/\[[\s\S]*\]/);
-            if (jsonMatch) {
-                return JSON.parse(jsonMatch[0]);
-            }
-
-            // 2. Пробуем распарсить как есть
+            if (jsonMatch) return JSON.parse(jsonMatch[0]);
             return JSON.parse(cleanResult);
-
         } catch (e) {
-            console.error("AI Error in generateTestTasks:", e);
-            // Если совсем беда — возвращаем заглушку, чтобы сайт не ломался
-            return [
-                "Расскажите о вашем опыте работы с технологиями из вакансии.",
-                "Почему вы хотите работать именно в нашей компании?"
-            ];
+            return ["Расскажите о вашем опыте.", "Почему вы хотите к нам?"];
         }
     }
 
     async reviewTest(questions, answers) {
-        // Формируем текст диалога для проверки
         let qaText = "";
-        questions.forEach((q, index) => {
-            qaText += `Вопрос ${index + 1}: ${q}\nОтвет студента: ${answers[index] || "Нет ответа"}\n\n`;
-        });
-
+        questions.forEach((q, index) => { qaText += `Вопрос ${index + 1}: ${q}\nОтвет: ${answers[index] || "-"}\n\n`; });
         const prompt = `
-            Ты — строгий технический интервьюер. Тебе нужно проверить ответы кандидата на тестовое задание.
-            
+            Проверь ответы кандидата.
             ${qaText}
-            
-            Твоя задача:
-            1. Оцени качество ответов по шкале от 0 до 100 (где 100 - идеально, 0 - полный бред).
-            2. Напиши краткий конструктивный фидбек: что правильно, а где ошибка.
-            
-            Верни ответ СТРОГО в формате JSON:
-            {
-                "score": 85,
-                "feedback": "Текст фидбека здесь..."
-            }
+            Верни JSON: { "score": 85, "feedback": "Текст..." }
         `;
-
         const result = await this.getCompletion([{ role: "user", content: prompt }]);
-        console.log("AI Review Result:", result);
-
         try {
-            // Очистка от markdown, если модель добавила ```json
             const cleanJson = result.replace(/```json/g, '').replace(/```/g, '').trim();
-            return JSON.parse(cleanJson);
+            // Groq иногда добавляет лишний текст в конце, ищем фигурную скобку
+            const jsonMatch = cleanJson.match(/\{[\s\S]*\}/);
+            return JSON.parse(jsonMatch ? jsonMatch[0] : cleanJson);
         } catch (e) {
-            console.error("AI Review Parse Error", e);
-            return { score: 0, feedback: "Ошибка автоматической проверки. Требуется ручной ревью." };
+            return { score: 0, feedback: "Ошибка проверки." };
         }
     }
 }

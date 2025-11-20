@@ -1,7 +1,8 @@
 <template>
   <div class="page-container">
     <header class="page-header">
-      <h1>🤖 Карьерный ассистент</h1>
+      <h1><robot-outlined style="color: #1890ff; margin-right: 10px;" />
+        Карьерный ассистент</h1>
       <div class="actions">
         <button @click="clearHistory" class="btn-clear">Начать заново</button>
         <button @click="$router.push('/')" class="btn-back">На главную</button>
@@ -56,8 +57,11 @@
 <script>
 import api from '../axios';
 import { marked } from 'marked'; // <--- Импортируем парсер
+import { Modal } from 'ant-design-vue';
+import { RobotOutlined } from '@ant-design/icons-vue';
 
 export default {
+  components: { RobotOutlined },
   data() {
     return {
       messages: [],
@@ -96,10 +100,18 @@ export default {
         this.loading = false;
       }
     },
-    async clearHistory() {
-      if(!confirm('Удалить переписку?')) return;
-      await api.delete('/chat/clear');
-      this.messages = [];
+    clearHistory() {
+      Modal.confirm({
+        title: 'Удаление истории',
+        content: 'Вы действительно хотите удалить всю переписку? Это действие нельзя отменить.',
+        okText: 'Да, удалить',
+        okType: 'danger',
+        cancelText: 'Отмена',
+        onOk: async () => {
+          await api.delete('/chat/clear');
+          this.messages = [];
+        }
+      });
     },
     scrollToBottom() {
       this.$nextTick(() => {

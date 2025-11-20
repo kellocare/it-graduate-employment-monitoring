@@ -1,135 +1,147 @@
 <template>
   <div class="login-container">
-    <div class="card">
-      <h2>Вход в систему</h2>
-      <form @submit.prevent="handleLogin">
-        <div class="form-group">
-          <label>Email:</label>
-          <input
-            v-model="email"
-            type="email"
-            required
-            placeholder="student@example.com"
-          >
-        </div>
-        <div class="form-group">
-          <label>Пароль:</label>
-          <input
-            v-model="password"
-            type="password"
-            required
-            placeholder="Ваш пароль"
-          >
-        </div>
+    <a-card class="auth-card" :title="isLogin ? 'Вход в систему' : 'Регистрация'">
 
-        <div v-if="errorMessage" class="error">{{ errorMessage }}</div>
+      <a-form layout="vertical" @submit.prevent="handleSubmit">
+        <!-- Поля ввода (как было) -->
+        <template v-if="!isLogin">
+           <a-row :gutter="16">
+             <a-col :span="12"><a-form-item label="Имя"><a-input v-model:value="form.first_name" /></a-form-item></a-col>
+             <a-col :span="12"><a-form-item label="Фамилия"><a-input v-model:value="form.last_name" /></a-form-item></a-col>
+           </a-row>
+        </template>
 
-        <button type="submit" :disabled="isLoading">
-          {{ isLoading ? 'Вход...' : 'Войти' }}
-        </button>
-      </form>
-    </div>
+        <a-form-item label="Email">
+          <a-input v-model:value="form.email" placeholder="email@example.com" />
+        </a-form-item>
+        <a-form-item label="Пароль">
+          <a-input-password v-model:value="form.password" />
+        </a-form-item>
+
+        <a-button type="primary" block html-type="submit" :loading="loading">
+          {{ isLogin ? 'Войти' : 'Зарегистрироваться' }}
+        </a-button>
+      </a-form>
+
+      <div class="divider">или войти через</div>
+
+      <div class="social-buttons">
+        <a-button block @click="socialLogin('google')">
+           <google-outlined /> Google
+        </a-button>
+        <a-button block @click="socialLogin('github')">
+           <github-outlined /> GitHub
+        </a-button>
+      </div>
+
+      <div class="switch-mode">
+        {{ isLogin ? 'Нет аккаунта?' : 'Уже есть аккаунт?' }}
+        <a @click="isLogin = !isLogin">{{ isLogin ? 'Зарегистрироваться' : 'Войти' }}</a>
+      </div>
+    </a-card>
   </div>
 </template>
 
 <script>
 import api from '../axios';
+import { message } from 'ant-design-vue';
+import { GoogleOutlined, GithubOutlined } from '@ant-design/icons-vue';
+import { useRoute, useRouter } from 'vue-router';
 
 export default {
+  components: {GoogleOutlined, GithubOutlined},
   data() {
     return {
-      email: '',
-      password: '',
-      errorMessage: '',
-      isLoading: false
+      isLogin: true,
+      loading: false,
+      form: {email: '', password: '', first_name: '', last_name: ''}
+    }
+  },
+  mounted() {
+    const route = useRoute();
+    const { token, user, error, activated, isNew } = route.query; // <--- Достаем isNew
+
+    if (activated) message.success('Аккаунт подтвержден! Теперь вы можете войти.');
+    if (error) message.error('Ошибка входа через соцсеть');
+
+    if (token && user) {
+        localStorage.setItem('token', token);
+        localStorage.setItem('user', decodeURIComponent(user));
+
+        message.success('Добро пожаловать!');
+
+        // ЕСЛИ НОВЫЙ ПОЛЬЗОВАТЕЛЬ -> Редирект в профиль с параметром edit=true
+        if (isNew === 'true') {
+             window.location.href = '/profile?mode=edit&welcome=true';
+        } else {
+             // Если старый -> Просто в профиль
+             window.location.href = '/profile';
+        }
     }
   },
   methods: {
-    async handleLogin() {
-      this.isLoading = true;
-      this.errorMessage = '';
-
+    async handleSubmit() {
+      this.loading = true;
       try {
-        const response = await api.post('/auth/login', {
-          email: this.email,
-          password: this.password
-        });
+        if (this.isLogin) {
+          const r = await api.post('/auth/login', this.form);
 
-        // 1. Если успех — сервер вернул токен
-        const token = response.data.token;
-        const user = response.data.user;
+          localStorage.setItem('token', r.data.token);
+          localStorage.setItem('user', JSON.stringify(r.data.user));
 
-        // 2. Сохраняем токен в память браузера (localStorage)
-        localStorage.setItem('token', token);
-        localStorage.setItem('user', JSON.stringify(user));
+          message.success('Вход выполнен');
 
-        // 3. Перенаправляем в личный кабинет
-        this.$router.push('/');
+          setTimeout(() => {
+             window.location.href = '/profile';
+          }, 100);
 
-      } catch (error) {
-        console.error('ПОЛНАЯ ОШИБКА:', error);
-
-        if (error.response) {
-          // Сервер ответил, но с ошибкой (например, неверный пароль)
-          alert(`Ошибка от сервера: ${error.response.status} - ${JSON.stringify(error.response.data)}`);
-          this.errorMessage = error.response.data.message;
-        } else if (error.request) {
-          // Запрос ушел, но ответа нет
-          console.log('Запрос:', error.request);
-          alert('Запрос отправлен, но сервер молчит. Проверь консоль (F12).');
-          this.errorMessage = 'Сервер не отвечает';
         } else {
-          // Ошибка настройки запроса
-          alert(`Ошибка настройки: ${error.message}`);
-          this.errorMessage = error.message;
+          await api.post('/auth/registration', { ...this.form, role: 'graduate' });
+          message.info('Письмо для подтверждения отправлено на почту!');
+          this.isLogin = true;
         }
+      } catch (e) {
+        message.error(e.response?.data?.message || 'Ошибка');
       } finally {
-        this.isLoading = false;
+        this.loading = false;
       }
+    },
+    socialLogin(provider) {
+      window.location.href = `http://localhost:4000/api/auth/${provider}`;
     }
   }
-}
+};
 </script>
 
 <style scoped>
-/* Немного красоты */
 .login-container {
   display: flex;
   justify-content: center;
   align-items: center;
-  height: 80vh;
+  min-height: 80vh;
 }
-.card {
-  border: 1px solid #ccc;
-  padding: 20px;
-  border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-  width: 300px;
+
+.auth-card {
+  width: 400px;
+  border-radius: 10px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
-.form-group {
-  margin-bottom: 15px;
-}
-input {
-  width: 100%;
-  padding: 8px;
-  margin-top: 5px;
-  box-sizing: border-box;
-}
-button {
-  width: 100%;
-  padding: 10px;
-  background-color: #42b983;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-}
-button:disabled {
-  background-color: #a0dca0;
-}
-.error {
-  color: red;
-  margin-bottom: 10px;
+
+.divider {
+  text-align: center;
+  color: #999;
+  margin: 20px 0;
   font-size: 0.9em;
+}
+
+.social-buttons {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.switch-mode {
+  text-align: center;
+  margin-top: 10px;
 }
 </style>

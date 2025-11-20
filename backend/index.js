@@ -15,6 +15,9 @@ const chatRouter = require('./routes/chatRoutes');
 const app = express();
 const PORT = process.env.PORT || 4000; // Убедись, что тут или в .env стоит 4000
 
+const path = require('path');
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
 // 1. Самый разрешающий CORS
 app.use(cors({
     origin: '*', // Разрешить всем фронтендам
@@ -32,6 +35,7 @@ app.use('/api/ai', aiRouter);
 app.use('/api/vacancies', vacancyRouter);
 app.use('/api/applications', applicationRouter);
 app.use('/api/chat', chatRouter);
+
 
 app.get('/', (req, res) => {
     res.json({ message: 'Server is working correctly!' });

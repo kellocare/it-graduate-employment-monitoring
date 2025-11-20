@@ -1,31 +1,29 @@
 import axios from 'axios';
 import router from './router';
 
-// Создаем экземпляр axios с базовым URL
 const instance = axios.create({
-    // ВАЖНО: Убедись, что порт совпадает с твоим Бэкендом (4000 или 5001)
-    baseURL: 'http://127.0.0.1:4000/api'
+    baseURL: 'http://127.0.0.1:4000/api' // Убедись, что адрес верный
 });
 
-// Перехватчик запросов (Interceptors)
+// Автоматическое добавление токена
 instance.interceptors.request.use(config => {
-    // Перед отправкой запроса берем токен из памяти
     const token = localStorage.getItem('token');
     if (token) {
+        // ВАЖНО: Пробел после Bearer обязателен!
         config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
 });
 
-// Перехватчик ответов (если токен протух)
+// Обработка ошибок (выкидывание на логин)
 instance.interceptors.response.use(response => {
     return response;
 }, error => {
     if (error.response && error.response.status === 401) {
-        // Если сервер сказал "401 Unauthorized", значит токен плохой
+        console.warn('Токен протух или неверен, разлогиниваем...');
         localStorage.removeItem('token');
         localStorage.removeItem('user');
-        router.push('/login'); // Выкидываем на вход
+        router.push('/login');
     }
     return Promise.reject(error);
 });
