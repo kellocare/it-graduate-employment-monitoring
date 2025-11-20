@@ -56,3 +56,50 @@ Content-Type: application/json
 ### Посмотреть мои работы
 GET http://127.0.0.1:4000/api/employment
 Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6ImdyYWR1YXRlIiwiaWF0IjoxNzYzNjQ1MzMyLCJleHAiOjE3NjM3MzE3MzJ9.LIAy5jrn-bDj1BhYlnqh4QF0M1gBsAVIGoHydKvXwrk
+
+### Тест ИИ (задай любой вопрос)
+POST http://127.0.0.1:4000/api/ai/ask
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6ImdyYWR1YXRlIiwiaWF0IjoxNzYzNjQ1MzMyLCJleHAiOjE3NjM3MzE3MzJ9.LIAy5jrn-bDj1BhYlnqh4QF0M1gBsAVIGoHydKvXwrk
+Content-Type: application/json
+
+{
+  "question": "Привет! Назови 3 главные компетенции для Junior Backend разработчика на Node.js"
+}
+
+### Создать вакансию и проверить работу ИИ
+POST http://127.0.0.1:4000/api/vacancies
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6ImdyYWR1YXRlIiwiaWF0IjoxNzYzNjQ1MzMyLCJleHAiOjE3NjM3MzE3MzJ9.LIAy5jrn-bDj1BhYlnqh4QF0M1gBsAVIGoHydKvXwrk
+Content-Type: application/json
+
+{
+  "company_id": 1,
+  "title": "Frontend Developer (Vue.js)",
+  "salary_min": 100000,
+  "contact_email": "hr@yandex.ru",
+  "description": "Мы ищем разработчика в команду поиска. Нам нужен человек, который отлично знает JavaScript и современные фреймворки. Основной стек: Vue 3, Pinia, Vite. Желателен опыт работы с TypeScript. Плюсом будет знание Node.js и умение работать с Git в консоли. Важно понимать, как работает REST API."
+}
+
+### Получить список вакансий (проверить, записались ли навыки)
+GET http://127.0.0.1:4000/api/vacancies
+
+### Начать отклик (сгенерировать тест)
+POST http://127.0.0.1:4000/api/applications/start
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6ImdyYWR1YXRlIiwiaWF0IjoxNzYzNjQ1MzMyLCJleHAiOjE3NjM3MzE3MzJ9.LIAy5jrn-bDj1BhYlnqh4QF0M1gBsAVIGoHydKvXwrk
+Content-Type: application/json
+
+{
+  "vacancy_id": 2
+}
+
+### Отправить ответы на проверку
+POST http://127.0.0.1:4000/api/applications/submit
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6ImdyYWR1YXRlIiwiaWF0IjoxNzYzNjQ1MzMyLCJleHAiOjE3NjM3MzE3MzJ9.LIAy5jrn-bDj1BhYlnqh4QF0M1gBsAVIGoHydKvXwrk
+Content-Type: application/json
+
+{
+  "application_id": 2,
+  "answers": [
+    "Для объединения используется merge. Чтобы избежать дублей, нужно правильно указать ключи (on=['key1', 'key2']).",
+    "SELECT product_name FROM orders WHERE status='completed' AND date > NOW() - INTERVAL '30 days' GROUP BY product_name ORDER BY SUM(income) DESC LIMIT 5"
+  ]
+}

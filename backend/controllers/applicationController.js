@@ -1,0 +1,148 @@
+const db = require('../db');
+const aiService = require('../services/aiService');
+
+class ApplicationController {
+
+    // Начать отклик (Сгенерировать тест)
+    async startApplication(req, res) {
+        try {
+            const userId = req.user.id;
+            const { vacancy_id } = req.body;
+
+            const gradRes = await db.query('SELECT id FROM graduates WHERE user_id = $1', [userId]);
+            if (gradRes.rows.length === 0) return res.status(403).json({ message: 'Вы не выпускник' });
+            const graduateId = gradRes.rows[0].id;
+
+            // Проверяем старые заявки
+            const check = await db.query(
+                'SELECT * FROM applications WHERE vacancy_id = $1 AND graduate_id = $2',
+                [vacancy_id, graduateId]
+            );
+
+            if (check.rows.length > 0) {
+                const existingApp = check.rows[0];
+
+                // Если уже откликался и получил ОТКАЗ — удаляем старую, даем шанс снова
+                if (existingApp.status === 'rejected') {
+                    await db.query('DELETE FROM applications WHERE id = $1', [existingApp.id]);
+                }
+                // Если уже ПРИНЯТ — не даем
+                else if (existingApp.status === 'accepted') {
+                    return res.status(400).json({ message: 'Вы уже приняты на эту вакансию!' });
+                }
+                // Если висит НЕЗАКОНЧЕННЫЙ тест — возвращаем его
+                else if (existingApp.status === 'pending_test') {
+                    return res.json(existingApp);
+                }
+            }
+
+            // Генерируем новые вопросы
+            const vacRes = await db.query('SELECT title, description FROM vacancies WHERE id = $1', [vacancy_id]);
+            const vacancy = vacRes.rows[0];
+
+            const tasks = await aiService.generateTestTasks(vacancy.title, vacancy.description);
+
+            const newApp = await db.query(
+                `INSERT INTO applications (vacancy_id, graduate_id, status, test_tasks) 
+                 VALUES ($1, $2, 'pending_test', $3) RETURNING *`,
+                [vacancy_id, graduateId, JSON.stringify(tasks)]
+            );
+
+            res.json(newApp.rows[0]);
+
+        } catch (e) {
+            console.error(e);
+            res.status(500).json({ message: 'Ошибка создания отклика' });
+        }
+    }
+
+    // Отправить решение (+ Сопроводительное письмо)
+    async submitTest(req, res) {
+        try {
+            const userId = req.user.id;
+            // Добавили cover_letter
+            const { application_id, answers, cover_letter } = req.body;
+
+            const appRes = await db.query(
+                `SELECT a.* FROM applications a
+                 JOIN graduates g ON a.graduate_id = g.id
+                 WHERE a.id = $1 AND g.user_id = $2`,
+                [application_id, userId]
+            );
+
+            if (appRes.rows.length === 0) return res.status(404).json({ message: 'Заявка не найдена' });
+            const application = appRes.rows[0];
+
+            // Отправляем ИИ на проверку
+            const review = await aiService.reviewTest(application.test_tasks, answers);
+
+            // Статус ставим rejected/accepted, но данные сохраняем в любом случае
+            const status = review.score >= 70 ? 'accepted' : 'rejected';
+
+            const updatedApp = await db.query(
+                `UPDATE applications 
+                 SET student_answers = $1, 
+                     ai_feedback = $2, 
+                     ai_score = $3, 
+                     status = $4,
+                     cover_letter = $5
+                 WHERE id = $6
+                 RETURNING *`,
+                [JSON.stringify(answers), review.feedback, review.score, status, cover_letter, application_id]
+            );
+
+            res.json(updatedApp.rows[0]);
+
+        } catch (e) {
+            console.error(e);
+            res.status(500).json({ message: 'Ошибка отправки теста' });
+        }
+    }
+
+    // Отмена заявки (удаление)
+    async cancelApplication(req, res) {
+        try {
+            const userId = req.user.id;
+            const { application_id } = req.body;
+
+            // Удаляем только если статус pending_test (чтобы не удалить историю принятых)
+            await db.query(
+                `DELETE FROM applications 
+                 USING graduates 
+                 WHERE applications.graduate_id = graduates.id 
+                 AND applications.id = $1 
+                 AND graduates.user_id = $2
+                 AND applications.status = 'pending_test'`,
+                [application_id, userId]
+            );
+
+            res.json({ message: 'Заявка отменена' });
+        } catch (e) {
+            console.error(e);
+            res.status(500).json({ message: 'Ошибка отмены' });
+        }
+    }
+
+    // Получить мои отклики (оставляем как было)
+    async getMyApplications(req, res) {
+        /* ... код тот же, что был в шаге 18.2 ... */
+        /* Если нужно, скопируй из прошлого ответа, здесь сократил для экономии места */
+        try {
+            const userId = req.user.id;
+            const result = await db.query(`
+                SELECT a.*, v.title as vacancy_title, c.name as company_name
+                FROM applications a
+                JOIN graduates g ON a.graduate_id = g.id
+                JOIN vacancies v ON a.vacancy_id = v.id
+                JOIN companies c ON v.company_id = c.id
+                WHERE g.user_id = $1
+                ORDER BY a.created_at DESC
+            `, [userId]);
+            res.json(result.rows);
+        } catch (e) {
+            res.status(500).json({ message: 'Ошибка' });
+        }
+    }
+}
+
+module.exports = new ApplicationController();

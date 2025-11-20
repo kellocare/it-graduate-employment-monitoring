@@ -8,6 +8,8 @@
         </div>
       </div>
       <div class="actions">
+        <button @click="$router.push('/vacancies')" class="btn-vacancies">💼 Вакансии</button>
+        <button @click="$router.push('/chat')" class="btn-chat">🤖 AI Чат</button>
         <button @click="$router.push('/profile')" class="btn-primary">👤 Мой профиль</button>
         <button @click="logout" class="btn-danger">Выйти</button>
       </div>
@@ -143,7 +145,9 @@ h1 { margin: 0; font-size: 1.8em; color: #2c3e50; }
   margin-left: 10px;
 }
 .btn-primary { background: #3498db; color: white; }
+.btn-chat { background: #16a085; color: white; margin-right: 10px;}
 .btn-danger { background: #e74c3c; color: white; }
+.btn-vacancies { background: #8e44ad; color: white; }
 
 /* Сетка карточек */
 .stats-grid {
