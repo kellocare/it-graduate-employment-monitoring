@@ -70,6 +70,20 @@ class MessagesController {
             res.status(500).json({ message: 'Ошибка отправки' });
         }
     }
+
+    async getUnreadCount(req, res) {
+        try {
+            const userId = req.user.id;
+            const result = await db.query(
+                'SELECT COUNT(*) FROM direct_messages WHERE receiver_id = $1 AND is_read = FALSE',
+                [userId]
+            );
+            res.json({ count: parseInt(result.rows[0].count) });
+        } catch (e) {
+            console.error(e);
+            res.status(500).json({ count: 0 });
+        }
+    }
 }
 
 module.exports = new MessagesController();

@@ -10,6 +10,13 @@
     <div class="auth-actions">
       <template v-if="user">
 
+        <!-- ИКОНКА СООБЩЕНИЙ (ОБНОВЛЕНО) -->
+        <div class="icon-btn" @click="$router.push('/messages')" title="Сообщения">
+           <a-badge :count="msgCount" :offset="[-5, 5]">
+             <message-outlined style="font-size: 20px; color: #555;" />
+           </a-badge>
+        </div>
+
         <!-- КОЛОКОЛЬЧИК УВЕДОМЛЕНИЙ -->
         <a-popover trigger="click" placement="bottomRight" overlayClassName="notif-popover">
           <template #content>
@@ -20,11 +27,17 @@
                 :key="item.id"
                 class="notif-item"
                 :class="{ 'unread': !item.is_read }"
-                @click="markRead(item)"
               >
-                <div class="notif-title">{{ item.title }}</div>
-                <div class="notif-msg">{{ item.message }}</div>
-                <div class="notif-date">{{ new Date(item.created_at).toLocaleDateString() }}</div>
+                <div class="notif-header" @click="markRead(item)">
+                   <div class="notif-title">{{ item.title }}</div>
+                   <div class="notif-date">{{ new Date(item.created_at).toLocaleDateString() }}</div>
+                </div>
+                <div class="notif-msg" @click="markRead(item)">{{ item.message }}</div>
+
+                <div v-if="item.type === 'invite' && !item.is_read" class="invite-actions">
+                  <a-button type="primary" size="small" @click="respond(item, 'accepted')">Принять</a-button>
+                  <a-button danger size="small" @click="respond(item, 'declined')">Отклонить</a-button>
+                </div>
               </div>
             </div>
           </template>
@@ -32,7 +45,6 @@
             <bell-outlined style="font-size: 20px; cursor: pointer; color: #555;" />
           </a-badge>
         </a-popover>
-        <!-- КОНЕЦ КОЛОКОЛЬЧИКА -->
 
         <a-dropdown>
           <a-button type="text" class="user-btn">
@@ -60,14 +72,15 @@
 <script>
 import { ref, watch, onMounted, computed, h } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
-import api from '../axios'; // Не забудь импортировать api!
+import api from '../axios';
+import { message } from 'ant-design-vue';
 import {
   HomeOutlined, AppstoreOutlined, RobotOutlined, DownOutlined,
-  LineChartOutlined, RocketTwoTone, BankOutlined, UserOutlined, BellOutlined
+  LineChartOutlined, RocketTwoTone, BankOutlined, UserOutlined, BellOutlined, MessageOutlined
 } from '@ant-design/icons-vue';
 
 export default {
-  components: { DownOutlined, RocketTwoTone, UserOutlined, BellOutlined },
+  components: { DownOutlined, RocketTwoTone, UserOutlined, BellOutlined, MessageOutlined },
   setup() {
     const router = useRouter();
     const route = useRoute();
@@ -75,11 +88,9 @@ export default {
     const user = ref(null);
     const menuItems = ref([]);
 
-    // Уведомления
     const notifications = ref([]);
-
-    // Считаем непрочитанные
     const unreadCount = computed(() => notifications.value.filter(n => !n.is_read).length);
+    const msgCount = ref(0); // <--- Новая переменная для сообщений
 
     const loadNotifications = async () => {
       if (!user.value) return;
@@ -89,12 +100,36 @@ export default {
       } catch (e) { console.error(e); }
     };
 
+    // Загрузка счетчика сообщений
+    const loadMsgCount = async () => {
+        if (!user.value) return;
+        try {
+            const r = await api.get('/messages/unread');
+            msgCount.value = r.data.count;
+        } catch (e) {}
+    };
+
     const markRead = async (item) => {
       if (item.is_read) return;
       try {
         await api.post('/notifications/read', { id: item.id });
-        item.is_read = true; // Обновляем локально
+        item.is_read = true;
       } catch (e) {}
+    };
+
+    const respond = async (item, status) => {
+      try {
+        await api.post('/invites/respond', {
+          notification_id: item.id,
+          employer_id: item.sender_id,
+          status: status
+        });
+        message.success(status === 'accepted' ? 'Приглашение принято! Чат создан.' : 'Приглашение отклонено');
+        item.is_read = true;
+        if (status === 'accepted') router.push('/messages');
+      } catch (e) {
+        message.error('Ошибка при отправке ответа');
+      }
     };
 
     const checkUser = () => {
@@ -113,14 +148,16 @@ export default {
 
       menuItems.value = items;
 
-      // Загружаем уведомления при старте
       loadNotifications();
+      loadMsgCount(); // <--- Вызов
     };
 
     onMounted(() => {
       checkUser();
-      // Можно добавить поллинг (обновление) раз в 30 сек
-      setInterval(loadNotifications, 30000);
+      setInterval(() => {
+          loadNotifications();
+          loadMsgCount();
+      }, 10000); // Каждые 10 сек
     });
 
     watch(() => route.path, (path) => {
@@ -153,7 +190,7 @@ export default {
       setTimeout(() => window.location.reload(), 100);
     };
 
-    return { current, menuItems, handleMenuClick, user, logout, goToProfile, notifications, unreadCount, markRead };
+    return { current, menuItems, handleMenuClick, user, logout, goToProfile, notifications, unreadCount, markRead, respond, msgCount };
   }
 };
 </script>
@@ -165,14 +202,18 @@ export default {
 .user-btn { color: #333; }
 .auth-actions { display: flex; align-items: center; gap: 15px; }
 
-/* Стили уведомлений */
+.icon-btn { cursor: pointer; padding: 5px; transition: 0.2s; }
+.icon-btn:hover { opacity: 0.7; }
+
 .notif-badge { margin-right: 10px; }
-.notif-list { width: 300px; max-height: 400px; overflow-y: auto; }
+.notif-list { width: 320px; max-height: 400px; overflow-y: auto; }
 .notif-item { padding: 12px; border-bottom: 1px solid #f0f0f0; cursor: pointer; transition: 0.2s; }
 .notif-item:hover { background: #fafafa; }
 .notif-item.unread { background: #e6f7ff; }
-.notif-title { font-weight: bold; color: #1890ff; margin-bottom: 4px; }
+.notif-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px; }
+.notif-title { font-weight: bold; color: #1890ff; font-size: 0.95em; }
+.notif-date { font-size: 0.75em; color: #999; white-space: nowrap; margin-left: 10px; }
 .notif-msg { font-size: 0.9em; color: #555; line-height: 1.4; }
-.notif-date { font-size: 0.8em; color: #999; margin-top: 5px; text-align: right; }
 .empty-notif { padding: 20px; text-align: center; color: #999; }
+.invite-actions { margin-top: 10px; display: flex; gap: 10px; justify-content: flex-end; }
 </style>

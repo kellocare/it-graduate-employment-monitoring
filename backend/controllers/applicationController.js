@@ -123,6 +123,35 @@ class ApplicationController {
         }
     }
 
+    async getEmployerApplications(req, res) {
+        try {
+            const userId = req.user.id;
+
+            const compRes = await db.query('SELECT id FROM companies WHERE user_id = $1', [userId]);
+            if (compRes.rows.length === 0) return res.json([]);
+            const companyId = compRes.rows[0].id;
+
+            const applications = await db.query(`
+                SELECT a.*, 
+                       v.title as vacancy_title,
+                       g.id as graduate_id, g.user_id as student_user_id,
+                       g.first_name, g.last_name, g.avatar_url, g.about_me
+                FROM applications a
+                JOIN vacancies v ON a.vacancy_id = v.id
+                JOIN graduates g ON a.graduate_id = g.id
+                WHERE v.company_id = $1 
+                  AND a.status = 'accepted'
+                ORDER BY a.created_at DESC
+            `, [companyId]);
+
+            res.json(applications.rows);
+
+        } catch (e) {
+            console.error(e);
+            res.status(500).json({ message: 'Ошибка получения откликов' });
+        }
+    }
+
     // Получить мои отклики (оставляем как было)
     async getMyApplications(req, res) {
         /* ... код тот же, что был в шаге 18.2 ... */

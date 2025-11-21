@@ -47,7 +47,7 @@
           </div>
         </a-tab-pane>
 
-        <!-- Вкладка 3: Поиск Кандидатов (НОВОЕ) -->
+        <!-- Вкладка 3: Поиск Кандидатов -->
         <a-tab-pane key="candidates" tab="Поиск кандидатов" :disabled="!company.id">
           <div class="tab-content">
              <h3>🎓 Выпускники, ищущие работу</h3>
@@ -68,29 +68,63 @@
 
                   <p class="bio">{{ student.about_me ? student.about_me.substring(0, 80) + '...' : 'Нет описания навыков' }}</p>
 
-                  <!-- Результат AI -->
                   <div v-if="student.aiResult" class="ai-box">
-                    <div class="ai-score">
-                      Соответствие:
-                      <span :class="getScoreClass(student.aiResult.score)">{{ student.aiResult.score }}%</span>
-                    </div>
+                    <div class="ai-score">Соответствие: <span :class="getScoreClass(student.aiResult.score)">{{ student.aiResult.score }}%</span></div>
                     <p class="ai-reason">{{ student.aiResult.reason }}</p>
                   </div>
 
+                  <div v-if="student.invite_status === 'declined'" class="declined-badge"><close-circle-outlined /> Кандидат отказался</div>
+                  <div v-else-if="student.invite_status === 'accepted'" class="accepted-badge"><check-circle-outlined /> Кандидат принял приглашение</div>
+                  <div v-else-if="student.invite_status === 'pending'" class="pending-badge"><clock-circle-outlined /> Приглашение отправлено</div>
+
                   <template #actions>
-                     <a-tooltip title="Спросить ИИ">
-                        <a-button type="dashed" size="small" @click="analyzeCandidate(student)" :loading="student.aiLoading">
-                          🤖 AI Анализ
-                        </a-button>
-                     </a-tooltip>
-                     <a-tooltip title="Отправить приглашение">
-                        <a-button type="primary" size="small" @click="openInvite(student)">
-                          📩 Пригласить
-                        </a-button>
-                     </a-tooltip>
+                     <a-tooltip title="Спросить ИИ"><a-button type="dashed" size="small" @click="analyzeCandidate(student)" :loading="student.aiLoading">🤖 AI Анализ</a-button></a-tooltip>
+                     <a-tooltip title="Отправить приглашение"><a-button type="primary" size="small" @click="openInvite(student)" :disabled="!!student.invite_status">📩 Пригласить</a-button></a-tooltip>
                   </template>
                 </a-card>
              </div>
+          </div>
+        </a-tab-pane>
+
+        <!-- Вкладка 4: Входящие Отклики (НОВАЯ) -->
+        <a-tab-pane key="applications" tab="Входящие отклики" :disabled="!company.id">
+          <div class="tab-content">
+             <h3>📥 Кандидаты, прошедшие AI-отбор</h3>
+             <p class="hint-text">Здесь отображаются студенты, успешно выполнившие тестовое задание к вашим вакансиям.</p>
+
+             <a-list item-layout="vertical" :data-source="applications">
+                <template #renderItem="{ item }">
+                  <a-list-item class="app-item">
+                    <template #extra>
+                       <div class="app-score">
+                         <div class="score-circle">{{ item.ai_score }}</div>
+                         <div class="score-label">Балл ИИ</div>
+                       </div>
+                    </template>
+
+                    <a-list-item-meta :description="`Вакансия: ${item.vacancy_title}`">
+                      <template #title>
+                        <span class="app-name">{{ item.first_name }} {{ item.last_name }}</span>
+                      </template>
+                      <template #avatar>
+                        <a-avatar :src="item.avatar_url ? `http://localhost:4000${item.avatar_url}` : null" :size="50">
+                          <template #icon><user-outlined /></template>
+                        </a-avatar>
+                      </template>
+                    </a-list-item-meta>
+
+                    <div class="cover-letter" v-if="item.cover_letter">
+                      <b>Сопроводительное письмо:</b>
+                      <p>{{ item.cover_letter }}</p>
+                    </div>
+
+                    <div class="app-actions">
+                       <a-button type="primary" @click="openInviteFromApp(item)">Написать / Пригласить</a-button>
+                    </div>
+                  </a-list-item>
+                </template>
+                <template #emptyText><a-empty description="Пока нет откликов" /></template>
+             </a-list>
           </div>
         </a-tab-pane>
 
@@ -102,18 +136,25 @@
 <script>
 import api from '../axios';
 import { message, Modal } from 'ant-design-vue';
-import { SaveOutlined, PlusOutlined, DeleteOutlined, UserOutlined } from '@ant-design/icons-vue';
-import { h } from 'vue'; // Для рендера в модалке
+import {
+  SaveOutlined, PlusOutlined, DeleteOutlined, UserOutlined,
+  CloseCircleOutlined, CheckCircleOutlined, ClockCircleOutlined
+} from '@ant-design/icons-vue';
+import { h } from 'vue';
 
 export default {
-  components: { SaveOutlined, PlusOutlined, DeleteOutlined, UserOutlined },
+  components: {
+    SaveOutlined, PlusOutlined, DeleteOutlined, UserOutlined,
+    CloseCircleOutlined, CheckCircleOutlined, ClockCircleOutlined
+  },
   data() {
     return {
       activeTab: 'profile',
       loading: false,
       company: { name: '', city: '', description: '', website: '', inn: '' },
       vacancies: [],
-      candidates: [], // Список студентов
+      candidates: [],
+      applications: [], // <--- Добавлено
       columns: [
         { title: 'Должность', dataIndex: 'title', key: 'title' },
         { title: 'Зарплата', key: 'salary' },
@@ -127,6 +168,7 @@ export default {
     if (this.company.id) {
       await this.loadMyVacancies();
       await this.loadCandidates();
+      await this.loadApplications(); // <--- Вызов
     }
   },
   methods: {
@@ -148,6 +190,12 @@ export default {
         this.candidates = r.data.map(c => ({ ...c, aiLoading: false, aiResult: null }));
       } catch (e) {}
     },
+    async loadApplications() { // <--- Новый метод
+      try {
+        const r = await api.get('/applications/employer');
+        this.applications = r.data;
+      } catch (e) { console.error(e); }
+    },
     async saveCompany() {
       this.loading = true;
       try {
@@ -160,21 +208,14 @@ export default {
     async deleteVacancy(id) {
       try { await api.delete(`/vacancies/${id}`); await this.loadMyVacancies(); message.success('Удалено'); } catch (e) {}
     },
-
-    // AI Анализ
     async analyzeCandidate(student) {
       student.aiLoading = true;
       try {
         const r = await api.post('/candidates/analyze', { candidate_id: student.id });
         student.aiResult = r.data;
-      } catch (e) {
-        message.error('Ошибка анализа');
-      } finally {
-        student.aiLoading = false;
-      }
+      } catch (e) { message.error('Ошибка анализа'); } finally { student.aiLoading = false; }
     },
 
-    // Приглашение
     openInvite(student) {
       let msg = '';
       Modal.confirm({
@@ -182,9 +223,7 @@ export default {
         content: h('div', {}, [
           h('p', 'Напишите сообщение студенту:'),
           h('textarea', {
-             class: 'ant-input',
-             rows: 3,
-             placeholder: 'Приходите к нам на собеседование...',
+             class: 'ant-input', rows: 3, placeholder: 'Приходите к нам на собеседование...',
              onInput: (e) => { msg = e.target.value }
           })
         ]),
@@ -193,9 +232,19 @@ export default {
           try {
             await api.post('/candidates/invite', { candidate_user_id: student.user_id, message: msg });
             message.success('Приглашение отправлено!');
+            await this.loadCandidates();
           } catch(e) { message.error('Ошибка отправки'); }
         }
       });
+    },
+
+    openInviteFromApp(appItem) {
+        this.openInvite({
+            first_name: appItem.first_name,
+            user_id: appItem.student_user_id,
+            // Добавим id для обновления списка кандидатов, если нужно, но тут не критично
+            id: appItem.graduate_id
+        });
     },
 
     getScoreClass(score) {
@@ -215,13 +264,11 @@ export default {
 .mb-20 { margin-bottom: 20px; }
 .flex-between { display: flex; justify-content: space-between; align-items: center; }
 
-/* Сетка кандидатов */
 .candidates-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; margin-top: 20px; }
 .candidate-card { border-radius: 10px; border: 1px solid #eee; }
 .spec-text { font-size: 0.85em; color: #888; margin-top: 2px; }
 .bio { font-size: 0.9em; color: #555; margin: 15px 0; height: 40px; overflow: hidden; }
 
-/* AI Результат */
 .ai-box { background: #f6ffed; border: 1px solid #b7eb8f; padding: 8px; border-radius: 6px; margin-bottom: 15px; font-size: 0.85em; }
 .ai-score { font-weight: bold; margin-bottom: 4px; }
 .score-high { color: #52c41a; }
@@ -229,4 +276,19 @@ export default {
 .score-low { color: #ff4d4f; }
 .ai-reason { margin: 0; color: #333; }
 .hint-text { color: #666; font-style: italic; }
+
+.declined-badge { color: #ff4d4f; font-weight: bold; background: #fff1f0; padding: 8px; border-radius: 4px; margin-bottom: 15px; font-size: 0.85em; text-align: center; border: 1px solid #ffa39e; }
+.accepted-badge { color: #52c41a; font-weight: bold; background: #f6ffed; padding: 8px; border-radius: 4px; margin-bottom: 15px; font-size: 0.85em; text-align: center; border: 1px solid #b7eb8f; }
+.pending-badge { color: #1890ff; font-weight: bold; background: #e6f7ff; padding: 8px; border-radius: 4px; margin-bottom: 15px; font-size: 0.85em; text-align: center; border: 1px solid #91d5ff; }
+
+/* Стили откликов */
+.app-item { background: #fff; border: 1px solid #f0f0f0; border-radius: 8px; padding: 20px; margin-bottom: 15px; }
+.app-name { font-size: 1.1em; font-weight: bold; }
+.app-score { text-align: center; }
+.score-circle { width: 40px; height: 40px; background: #52c41a; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; margin: 0 auto; }
+.score-label { font-size: 0.7em; color: #888; margin-top: 5px; }
+.cover-letter { background: #fafafa; padding: 10px; border-radius: 6px; margin: 15px 0; border-left: 3px solid #1890ff; }
+.cover-letter b { font-size: 0.9em; color: #555; }
+.cover-letter p { margin: 5px 0 0; color: #333; }
+.app-actions { margin-top: 10px; }
 </style>
