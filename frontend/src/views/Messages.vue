@@ -1,14 +1,17 @@
 <template>
   <div class="messenger-page">
-    <div class="messenger-container">
+    <div class="messenger-card">
 
       <!-- ЛЕВАЯ КОЛОНКА: Список диалогов -->
-      <div class="sidebar">
+      <div class="sidebar custom-scroll">
         <div class="sidebar-header">
-          <h3>Сообщения</h3>
+          <h3><message-outlined /> Сообщения</h3>
         </div>
+
         <div class="chats-list">
-          <div v-if="conversations.length === 0" class="empty-chats">Нет диалогов</div>
+          <div v-if="conversations.length === 0" class="empty-chats">
+            У вас пока нет активных диалогов
+          </div>
 
           <div
             v-for="chat in conversations"
@@ -17,18 +20,28 @@
             :class="{ active: activeChat && activeChat.user_id === chat.user_id && activeChat.vacancy_id === chat.vacancy_id }"
             @click="selectChat(chat)"
           >
-            <a-avatar :size="40" :src="getAvatarUrl(chat.avatar_url)" class="chat-avatar">
-              <template #icon><user-outlined /></template>
-            </a-avatar>
-            <div class="chat-info">
-              <div class="chat-name">{{ chat.name || chat.email }}</div>
-              <!-- Отображение вакансии в списке -->
-              <div class="chat-vacancy" v-if="chat.vacancy_title">
-                <tag-outlined /> {{ chat.vacancy_title }}
-              </div>
-              <div class="chat-last-msg">{{ chat.last_message }}</div>
+            <div class="avatar-wrapper">
+              <a-avatar :size="45" :src="getAvatarUrl(chat.avatar_url)" class="chat-avatar" :style="{ backgroundColor: stringToColor(chat.name || chat.email) }">
+                <template #icon><user-outlined /></template>
+              </a-avatar>
             </div>
-            <div class="chat-date">{{ formatTime(chat.created_at) }}</div>
+
+            <div class="chat-info">
+              <div class="chat-top-row">
+                <div class="chat-name">{{ chat.name || chat.email }}</div>
+                <div class="chat-date">{{ formatTime(chat.created_at) }}</div>
+              </div>
+
+              <!-- Отображение вакансии (тег) -->
+              <div class="chat-vacancy" v-if="chat.vacancy_title">
+                <span>{{ chat.vacancy_title }}</span>
+              </div>
+
+              <!-- Последнее сообщение (БЕЗ MARKDOWN) -->
+              <div class="chat-last-msg">
+                {{ stripMarkdown(chat.last_message) }}
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -40,58 +53,67 @@
           <!-- ЗАГОЛОВОК ЧАТА -->
           <div class="chat-header">
             <div class="header-info">
-               <span class="chat-header-name">{{ activeChat.name || activeChat.email }}</span>
-               <span class="chat-header-vacancy" v-if="activeChat.vacancy_title">
-                 — {{ activeChat.vacancy_title }}
-               </span>
+               <div class="header-name">{{ activeChat.name || activeChat.email }}</div>
+               <div class="header-vacancy" v-if="activeChat.vacancy_title">
+                 <tag-outlined /> {{ activeChat.vacancy_title }}
+               </div>
             </div>
 
+            <!-- КНОПКИ ДЕЙСТВИЙ (SOFT UI) -->
             <div class="header-actions">
-               <!-- КНОПКА СДАЧИ РЕШЕНИЯ -->
-               <a-button type="primary" ghost size="small" @click="showSolutionModal = true" style="margin-right: 10px;">
-                 📎 Сдать решение
-               </a-button>
+               <button class="btn-action btn-solution" @click="showSolutionModal = true" title="Отправить решение">
+                 <paper-clip-outlined /> <span>Сдать решение</span>
+               </button>
 
-               <!-- КНОПКА ВИДЕОЗВОНКА -->
-               <a-tooltip title="Начать видеозвонок">
-                 <a-button type="primary" shape="circle" @click="startVideoCall">
-                    <video-camera-outlined />
-                 </a-button>
-               </a-tooltip>
+               <button class="btn-action btn-video" @click="startVideoCall" title="Видеозвонок">
+                 <video-camera-outlined />
+               </button>
             </div>
           </div>
 
           <!-- ОБЛАСТЬ СООБЩЕНИЙ -->
-          <div class="messages-area" ref="messagesContainer" @click="handleMessageClick">
+          <div class="messages-area custom-scroll" ref="messagesContainer" @click="handleMessageClick">
             <div v-for="(msg, index) in messages" :key="index"
-                 class="message-bubble"
-                 :class="msg.sender_id === currentUser.id ? 'my-msg' : 'their-msg'"
+                 class="message-row"
+                 :class="msg.sender_id === currentUser.id ? 'row-me' : 'row-them'"
             >
-              <!-- v-html рендерит и Markdown, и кнопки звонков -->
-              <div class="msg-content" v-html="formatMessage(msg.content)"></div>
-              <div class="msg-time">{{ formatTime(msg.created_at) }}</div>
+              <div class="message-bubble" :class="msg.sender_id === currentUser.id ? 'bubble-me' : 'bubble-them'">
+                <div class="msg-content" v-html="formatMessage(msg.content)"></div>
+                <div class="msg-meta">
+                  {{ formatTime(msg.created_at) }}
+                  <span v-if="msg.sender_id === currentUser.id" class="check-icon">✓</span>
+                </div>
+              </div>
             </div>
           </div>
 
-          <!-- ВВОД СООБЩЕНИЯ -->
-          <div class="input-area">
-            <a-textarea
-              v-model:value="newMessage"
-              :rows="1"
-              placeholder="Напишите сообщение..."
-              @pressEnter.prevent="sendMessage"
-              class="msg-input"
-            />
-            <a-button type="primary" shape="circle" @click="sendMessage">
-              <send-outlined />
-            </a-button>
+          <!-- ВВОД СООБЩЕНИЯ (MODERN OVAL) -->
+          <div class="input-wrapper">
+            <div class="input-container">
+              <a-textarea
+                v-model:value="newMessage"
+                :rows="1"
+                placeholder="Напишите сообщение..."
+                @pressEnter.prevent="sendMessage"
+                class="modern-input"
+              />
+              <button class="btn-send-modern" @click="sendMessage" :disabled="!newMessage.trim()">
+                <send-outlined />
+              </button>
+            </div>
           </div>
         </template>
 
+        <!-- ЭКРАН "ВЫБЕРИТЕ СОБЕСЕДНИКА" -->
         <template v-else>
           <div class="no-chat-selected">
-            <message-outlined style="font-size: 60px; color: #ddd; margin-bottom: 20px;" />
-            <p>Выберите собеседника, чтобы начать общение</p>
+            <div class="empty-illustration">
+              <div class="circle-bg">
+                <message-outlined />
+              </div>
+            </div>
+            <h3>Выберите чат</h3>
+            <p>Слева находится список ваших диалогов.<br>Выберите один из них, чтобы начать общение.</p>
           </div>
         </template>
       </div>
@@ -101,30 +123,31 @@
     <!-- МОДАЛЬНОЕ ОКНО СДАЧИ РЕШЕНИЯ -->
     <a-modal
       v-model:open="showSolutionModal"
-      title="Отправка решения тестового задания"
+      title="Отправка решения"
       ok-text="Отправить"
       cancel-text="Отмена"
       @ok="submitSolution"
       :confirm-loading="uploading"
+      centered
     >
       <a-form layout="vertical">
         <a-alert
-          message="Внимание"
-          description="ИИ проверит ваше решение и вынесет финальный вердикт о приеме на работу."
+          message="Важно"
+          description="ИИ проверит решение автоматически. Прикрепите файлы или ссылку."
           type="info"
           show-icon
           class="mb-20"
         />
 
-        <a-form-item label="Комментарий к решению">
+        <a-form-item label="Комментарий или ссылка">
           <a-textarea
             v-model:value="solutionDesc"
             rows="4"
-            placeholder="Опишите ваше решение, архитектуру или вставьте ссылку на GitHub..."
+            placeholder="Опишите решение, вставьте ссылку на GitHub..."
           />
         </a-form-item>
 
-        <a-form-item label="Файл (Архив, PDF, Docx)">
+        <a-form-item label="Файл (Архив, PDF)">
           <a-upload
             :file-list="fileList"
             :before-upload="beforeUpload"
@@ -132,7 +155,7 @@
             max-count="1"
           >
             <a-button>
-              <upload-outlined /> Выбрать файл
+              <upload-outlined /> Загрузить файл
             </a-button>
           </a-upload>
         </a-form-item>
@@ -144,17 +167,19 @@
 
 <script>
 import api from '../axios';
-import { marked } from 'marked'; // <--- ВАЖНО: Библиотека для Markdown
+import { marked } from 'marked';
 import { message } from 'ant-design-vue';
 import {
   UserOutlined, SendOutlined, MessageOutlined,
-  VideoCameraOutlined, UploadOutlined, TagOutlined
+  VideoCameraOutlined, UploadOutlined, TagOutlined,
+  PaperClipOutlined
 } from '@ant-design/icons-vue';
 
 export default {
   components: {
     UserOutlined, SendOutlined, MessageOutlined,
-    VideoCameraOutlined, UploadOutlined, TagOutlined
+    VideoCameraOutlined, UploadOutlined, TagOutlined,
+    PaperClipOutlined
   },
   data() {
     return {
@@ -178,7 +203,6 @@ export default {
 
     await this.loadConversations();
 
-    // Поллинг сообщений
     this.pollingInterval = setInterval(() => {
       if (this.activeChat) {
           this.loadMessages(this.activeChat.user_id, this.activeChat.vacancy_id, false);
@@ -203,7 +227,6 @@ export default {
     async loadMessages(partnerId, vacancyId, scroll = false) {
       try {
         const r = await api.get(`/messages/${partnerId}`, { params: { vacancy_id: vacancyId } });
-        // Обновляем только если изменилось количество сообщений (простая оптимизация)
         if (r.data.length !== this.messages.length) {
            this.messages = r.data;
            if (scroll) this.scrollToBottom();
@@ -212,7 +235,6 @@ export default {
     },
     async sendMessage() {
       if (!this.newMessage.trim() || !this.activeChat) return;
-
       const text = this.newMessage;
       this.newMessage = '';
 
@@ -233,10 +255,8 @@ export default {
       } catch (e) { console.error('Ошибка отправки'); }
     },
 
-    // --- ВИДЕОЗВОНОК ---
     async startVideoCall() {
       if (!this.activeChat) return;
-
       const roomId = `call-${this.currentUser.id}-${Date.now()}`;
       const link = `${window.location.origin}/room/${roomId}`;
       const text = `📞 Видеозвонок: ${link}`;
@@ -254,27 +274,54 @@ export default {
       } catch (e) {}
     },
 
-    // --- ФОРМАТИРОВАНИЕ СООБЩЕНИЙ ---
+    // Утилиты
+    stripMarkdown(text) {
+      if (!text) return '';
+      let clean = text
+        .replace(/\*\*(.*?)\*\*/g, '$1')
+        .replace(/__(.*?)__/g, '$1')
+        .replace(/\*(.*?)\*/g, '$1')
+        .replace(/`([^`]+)`/g, '$1')
+        .replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1')
+        .replace(/#+\s?/g, '')
+        .replace(/\n/g, ' ');
+
+      if (clean.length > 45) return clean.substring(0, 45) + '...';
+      return clean;
+    },
+
+    // --- НОВЫЙ ФОРМАТЕР С КАРТОЧКОЙ ЗВОНКА ---
     formatMessage(text) {
       if (!text) return '';
 
-      // 1. Проверка на ссылку звонка (превращаем в кнопку)
       const roomRegex = new RegExp(`${window.location.origin}/room/([a-zA-Z0-9_-]+)`, 'g');
       if (text.match(roomRegex)) {
           return text.replace(roomRegex, (match, roomId) => {
-              return `<br><span class="join-call-btn" data-route="/room/${roomId}">🎥 Присоединиться к звонку</span>`;
+              // Генерируем красивую карточку вместо простой ссылки
+              return `
+                <div class="video-call-card">
+                  <div class="video-icon-pulse">📹</div>
+                  <div class="video-details">
+                     <span class="video-label">Входящий звонок</span>
+                     <button class="join-call-btn" data-route="/room/${roomId}">
+                       Присоединиться
+                     </button>
+                  </div>
+                </div>
+              `;
           });
       }
-
-      // 2. Если это обычный текст — парсим Markdown (для ТЗ от ИИ)
-      try {
-        return marked.parse(text, { breaks: true });
-      } catch (e) {
-        return text;
-      }
+      try { return marked.parse(text, { breaks: true }); } catch (e) { return text; }
     },
 
-    // Обработка клика по кнопке звонка внутри сообщения
+    stringToColor(str) {
+      if (!str) return '#1890ff';
+      let hash = 0;
+      for (let i = 0; i < str.length; i++) { hash = str.charCodeAt(i) + ((hash << 5) - hash); }
+      const c = (hash & 0x00FFFFFF).toString(16).toUpperCase();
+      return '#' + '00000'.substring(0, 6 - c.length) + c;
+    },
+
     handleMessageClick(event) {
         if (event.target.classList.contains('join-call-btn')) {
             const route = event.target.dataset.route;
@@ -282,42 +329,27 @@ export default {
         }
     },
 
-    // --- СДАЧА РЕШЕНИЯ ---
     beforeUpload(file) { this.fileList = [file]; return false; },
     handleRemove() { this.fileList = []; },
 
     async submitSolution() {
-      if (!this.solutionDesc && this.fileList.length === 0) {
-        return message.warning('Добавьте описание или файл');
-      }
-
+      if (!this.solutionDesc && this.fileList.length === 0) return message.warning('Заполните поля');
       this.uploading = true;
       const formData = new FormData();
       formData.append('employer_user_id', this.activeChat.user_id);
       formData.append('description', this.solutionDesc);
-      if (this.fileList.length > 0) {
-        formData.append('solution', this.fileList[0]);
-      }
+      if (this.fileList.length > 0) formData.append('solution', this.fileList[0]);
 
       try {
-        await api.post('/applications/solution', formData, {
-           headers: { 'Content-Type': 'multipart/form-data' }
-        });
-        message.success('Решение отправлено!');
+        await api.post('/applications/solution', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+        message.success('Отправлено!');
         this.showSolutionModal = false;
         this.solutionDesc = '';
         this.fileList = [];
-
-        // Сразу обновляем сообщения, чтобы увидеть подтверждение
         await this.loadMessages(this.activeChat.user_id, this.activeChat.vacancy_id, true);
-      } catch (e) {
-        message.error(e.response?.data?.message || 'Ошибка отправки');
-      } finally {
-        this.uploading = false;
-      }
+      } catch (e) { message.error('Ошибка'); } finally { this.uploading = false; }
     },
 
-    // --- УТИЛИТЫ ---
     scrollToBottom() {
       this.$nextTick(() => {
         const container = this.$refs.messagesContainer;
@@ -334,52 +366,119 @@ export default {
 </script>
 
 <style scoped>
-.messenger-page { height: calc(100vh - 64px - 60px); background: #f0f2f5; padding: 20px; display: flex; justify-content: center; }
-.messenger-container { width: 100%; max-width: 1000px; background: #fff; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); display: flex; overflow: hidden; }
+/* ОСНОВНОЙ ЛЭЙАУТ */
+.messenger-page { height: calc(100vh - 64px); background: #f3f4f6; padding: 20px; display: flex; justify-content: center; }
+.messenger-card { width: 100%; max-width: 1100px; background: #fff; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); display: flex; overflow: hidden; border: 1px solid #e5e7eb; height: 85vh; }
 
-/* Сайдбар */
-.sidebar { width: 300px; border-right: 1px solid #f0f0f0; display: flex; flex-direction: column; }
-.sidebar-header { padding: 20px; border-bottom: 1px solid #f0f0f0; }
-.sidebar-header h3 { margin: 0; color: #333; }
-.chats-list { overflow-y: auto; flex: 1; }
-.chat-item { padding: 15px 20px; display: flex; align-items: center; gap: 12px; cursor: pointer; transition: 0.2s; border-bottom: 1px solid #fafafa; }
-.chat-item:hover { background: #f9f9f9; }
-.chat-item.active { background: #e6f7ff; border-right: 3px solid #1890ff; }
-.chat-info { flex: 1; overflow: hidden; }
-.chat-name { font-weight: bold; color: #333; font-size: 0.95em; }
-.chat-last-msg { font-size: 0.85em; color: #888; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.chat-date { font-size: 0.75em; color: #bbb; align-self: flex-start; }
-.chat-vacancy { font-size: 0.75em; color: #1890ff; margin-top: 2px; font-weight: bold; }
-.empty-chats { padding: 20px; text-align: center; color: #999; }
+/* --- САЙДБАР --- */
+.sidebar { width: 320px; border-right: 1px solid #e5e7eb; display: flex; flex-direction: column; background: #f9fafb; }
+.sidebar-header { padding: 20px; border-bottom: 1px solid #e5e7eb; background: #fff; }
+.sidebar-header h3 { margin: 0; color: #1f2937; font-weight: 700; font-size: 1.2rem; display: flex; align-items: center; gap: 10px; }
 
-/* Окно чата */
-.chat-window { flex: 1; display: flex; flex-direction: column; background: #fff; }
-.chat-header { padding: 10px 20px; border-bottom: 1px solid #f0f0f0; display: flex; justify-content: space-between; align-items: center; background: #fff; height: 60px; }
-.header-actions { display: flex; align-items: center; }
-.chat-header-name { font-weight: bold; color: #333; font-size: 1.1em; }
-.chat-header-vacancy { color: #888; font-weight: normal; font-size: 0.9em; margin-left: 10px; }
+.chats-list { overflow-y: auto; flex: 1; padding: 10px; }
+.chat-item {
+  padding: 12px;
+  display: flex;
+  gap: 12px;
+  cursor: pointer;
+  transition: 0.2s;
+  border-radius: 12px;
+  margin-bottom: 5px;
+  border: 1px solid transparent;
+}
+.chat-item:hover { background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
+.chat-item.active { background: #fff; border-color: #bfdbfe; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.1); }
+.chat-item.active .chat-name { color: #2563eb; }
 
-.messages-area { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; background: #f9f9f9; }
-.message-bubble { max-width: 75%; padding: 10px 14px; border-radius: 12px; line-height: 1.4; position: relative; font-size: 0.95em; word-wrap: break-word; }
-.my-msg { align-self: flex-end; background: #1890ff; color: white; border-bottom-right-radius: 2px; }
-.their-msg { align-self: flex-start; background: #fff; color: #333; border: 1px solid #e8e8e8; border-bottom-left-radius: 2px; }
-.msg-time { font-size: 0.7em; text-align: right; margin-top: 4px; opacity: 0.7; }
+.avatar-wrapper { flex-shrink: 0; }
+.chat-info { flex: 1; overflow: hidden; display: flex; flex-direction: column; justify-content: center; }
+.chat-top-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px; }
+.chat-name { font-weight: 600; color: #374151; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px; }
+.chat-date { font-size: 0.75rem; color: #9ca3af; }
 
-.input-area { padding: 15px; border-top: 1px solid #f0f0f0; display: flex; gap: 10px; align-items: center; background: #fff; }
-.msg-input { border-radius: 20px; }
+.chat-vacancy { font-size: 0.75rem; color: #6b7280; background: #f3f4f6; display: inline-block; padding: 1px 6px; border-radius: 4px; margin-bottom: 4px; width: fit-content; }
+.chat-last-msg { font-size: 0.85rem; color: #6b7280; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.active .chat-last-msg { color: #4b5563; }
 
-/* --- СТИЛИ ДЛЯ MARKDOWN И КНОПОК --- */
-:deep(.join-call-btn) { display: inline-block; background-color: #52c41a; color: white; padding: 5px 12px; border-radius: 15px; margin-top: 5px; cursor: pointer; font-weight: bold; box-shadow: 0 2px 5px rgba(0,0,0,0.2); transition: 0.2s; text-decoration: none; }
-:deep(.join-call-btn):hover { background-color: #73d13d; transform: translateY(-1px); }
+/* --- ЧАТ ОКНО --- */
+.chat-window { flex: 1; display: flex; flex-direction: column; background: #fff; position: relative; }
 
-/* Стили для заголовков и списков в Markdown (чтобы не разъезжалось) */
-:deep(h3), :deep(h4) { margin: 10px 0 5px 0; font-size: 1.1em; font-weight: bold; color: inherit; }
-:deep(p) { margin: 0 0 5px 0; }
-:deep(ul), :deep(ol) { margin: 5px 0; padding-left: 20px; }
-:deep(li) { margin-bottom: 2px; list-style-type: disc; }
-:deep(strong) { font-weight: bold; }
-:deep(pre) { background: rgba(0, 0, 0, 0.1); padding: 8px; border-radius: 6px; overflow-x: auto; margin: 5px 0; }
-:deep(code) { font-family: monospace; background: rgba(0, 0, 0, 0.1); padding: 2px 4px; border-radius: 3px; }
+/* Хедер чата */
+.chat-header { padding: 0 25px; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center; height: 70px; background: #fff; }
+.header-name { font-weight: 700; font-size: 1.1rem; color: #111827; }
+.header-vacancy { font-size: 0.85rem; color: #6b7280; margin-top: 2px; }
+
+/* Soft UI Кнопки в шапке */
+.header-actions { display: flex; gap: 10px; align-items: center; }
+.btn-action { border: none; height: 40px; border-radius: 12px; font-weight: 600; font-size: 0.9rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 0 16px; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+.btn-solution { background: #eef2ff; color: #4f46e5; }
+.btn-solution:hover { background: #e0e7ff; transform: translateY(-1px); }
+.btn-video { background: #fdf2f8; color: #db2777; padding: 0; width: 40px; }
+.btn-video:hover { background: #fce7f3; transform: translateY(-1px) rotate(5deg); }
+
+/* Область сообщений */
+.messages-area { flex: 1; padding: 25px; overflow-y: auto; display: flex; flex-direction: column; gap: 15px; background: #ffffff; }
+.message-row { display: flex; width: 100%; }
+.row-me { justify-content: flex-end; }
+.row-them { justify-content: flex-start; }
+
+.message-bubble { max-width: 70%; padding: 12px 18px; border-radius: 16px; line-height: 1.5; font-size: 0.95rem; position: relative; word-wrap: break-word; box-shadow: 0 2px 5px rgba(0,0,0,0.03); }
+.bubble-me { background: linear-gradient(135deg, #3b82f6, #2563eb); color: white; border-bottom-right-radius: 4px; }
+.bubble-them { background: #f3f4f6; color: #1f2937; border-bottom-left-radius: 4px; border: 1px solid #e5e7eb; }
+
+.msg-meta { font-size: 0.7rem; text-align: right; margin-top: 4px; opacity: 0.7; display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
+.check-icon { font-size: 0.8rem; }
+
+/* Ввод сообщения (Modern Oval) */
+.input-wrapper { padding: 20px; background: #fff; border-top: 1px solid #f3f4f6; }
+.input-container { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 24px; padding: 6px 6px 6px 20px; display: flex; align-items: center; gap: 10px; transition: all 0.3s ease; }
+.input-container:focus-within { background: #fff; border-color: #bfdbfe; box-shadow: 0 4px 12px rgba(59, 130, 246, 0.1); }
+.modern-input { border: none !important; background: transparent !important; box-shadow: none !important; resize: none; padding: 8px 0; font-size: 0.95rem; }
+.modern-input:focus { outline: none; }
+
+.btn-send-modern { width: 42px; height: 42px; border-radius: 50%; border: none; background: linear-gradient(135deg, #3b82f6, #2563eb); color: white; font-size: 1.1rem; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); flex-shrink: 0; }
+.btn-send-modern:hover { transform: scale(1.1); box-shadow: 0 4px 10px rgba(37, 99, 235, 0.3); }
+.btn-send-modern:disabled { background: #e5e7eb; color: #9ca3af; transform: none; box-shadow: none; cursor: default; }
+
+/* --- EMPTY STATE --- */
+.no-chat-selected {
+  height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: #f9fafb; text-align: center; padding: 40px;
+}
+.empty-illustration { margin-bottom: 25px; }
+.circle-bg {
+  width: 120px; height: 120px; background: white; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 3.5rem; color: #3b82f6;
+  box-shadow: 0 10px 30px rgba(59, 130, 246, 0.15);
+}
+.no-chat-selected h3 { font-size: 1.5rem; font-weight: 700; color: #1f2937; margin-bottom: 10px; }
+.no-chat-selected p { color: #6b7280; font-size: 1rem; max-width: 400px; line-height: 1.6; }
+
+/* --- SCROLLBAR --- */
+.custom-scroll::-webkit-scrollbar { width: 6px; }
+.custom-scroll::-webkit-scrollbar-track { background: transparent; }
+.custom-scroll::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.1); border-radius: 10px; }
+
+/* --- MARKDOWN & CARD STYLES --- */
+:deep(p) { margin: 0 0 6px 0; }
+:deep(strong) { font-weight: 700; }
+:deep(code) { background: rgba(0,0,0,0.1); padding: 2px 5px; border-radius: 4px; font-family: monospace; }
+
+/* КАРТОЧКА ЗВОНКА */
+:deep(.video-call-card) { background: rgba(255, 255, 255, 0.95); border-radius: 12px; padding: 12px; margin-top: 8px; display: flex; align-items: center; gap: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); max-width: 280px; transition: transform 0.2s; }
+:deep(.video-call-card:hover) { transform: translateY(-2px); }
+:deep(.video-icon-pulse) { width: 40px; height: 40px; background: #eef2ff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; animation: pulse-ring 2s infinite; }
+:deep(.video-details) { display: flex; flex-direction: column; gap: 4px; flex: 1; }
+:deep(.video-label) { font-size: 0.75rem; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; }
+:deep(.join-call-btn) { background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white; border: none; border-radius: 8px; padding: 6px 12px; font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: all 0.2s; text-align: center; }
+:deep(.join-call-btn:hover) { background: linear-gradient(135deg, #4f46e5, #7c3aed); box-shadow: 0 2px 8px rgba(99, 102, 241, 0.4); }
+
+@keyframes pulse-ring {
+  0% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.4); }
+  70% { box-shadow: 0 0 0 10px rgba(99, 102, 241, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0); }
+}
 
 .mb-20 { margin-bottom: 20px; }
 </style>

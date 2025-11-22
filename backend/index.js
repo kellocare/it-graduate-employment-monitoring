@@ -62,6 +62,8 @@ app.use('/api/messages', require('./routes/messagesRoutes'));
 
 // ==============================================
 
+app.use('/api/recruiters', require('./routes/recruiterRoutes'));
+
 // Тестовый маршрут (проверка жизни сервера)
 app.get('/', (req, res) => {
     res.json({ message: 'Server is running correctly!' });

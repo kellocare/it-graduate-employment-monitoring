@@ -20,9 +20,10 @@
 <script>
 import Navbar from './components/Navbar.vue';
 import Footer from './components/Footer.vue';
+import MagicCursor from './components/MagicCursor.vue';
 
 export default {
-  components: { Navbar, Footer }
+  components: {MagicCursor, Navbar, Footer }
 }
 </script>
 

@@ -14,7 +14,7 @@
         <a-menu v-model:selectedKeys="current" mode="horizontal" :items="menuItems" @click="handleMenuClick" class="custom-menu" />
       </div>
 
-      <!-- Правая часть -->
+      <!-- Правая часть (Авторизация) -->
       <div class="auth-actions">
         <template v-if="user">
 
@@ -56,10 +56,9 @@
             </a-badge>
           </a-popover>
 
-          <!-- Профиль -->
+          <!-- Профиль (Dropdown) -->
           <a-dropdown placement="bottomRight">
             <div class="user-profile-btn">
-              <!-- АВАТАР: Если есть URL - картинка, иначе - буква -->
               <a-avatar
                 :size="36"
                 :src="avatarUrl"
@@ -76,9 +75,24 @@
 
             <template #overlay>
               <a-menu class="profile-menu">
-                <a-menu-item key="profile" @click="goToProfile">
-                  <user-outlined /> {{ user.role === 'employer' ? 'Кабинет компании' : 'Мой профиль' }}
-                </a-menu-item>
+
+                <!-- ПУНКТЫ МЕНЮ ДЛЯ РАБОТОДАТЕЛЯ -->
+                <template v-if="user.role === 'employer'">
+                  <a-menu-item key="employer" @click="$router.push('/employer')">
+                    <bank-filled /> Кабинет компании
+                  </a-menu-item>
+                  <a-menu-item key="profile" @click="$router.push('/profile')">
+                    <user-outlined /> Мой личный профиль
+                  </a-menu-item>
+                </template>
+
+                <!-- ПУНКТЫ МЕНЮ ДЛЯ СТУДЕНТА -->
+                <template v-else>
+                  <a-menu-item key="profile" @click="$router.push('/profile')">
+                    <user-outlined /> Мой профиль
+                  </a-menu-item>
+                </template>
+
                 <a-menu-divider />
                 <a-menu-item key="logout" @click="logout" style="color: #e53e3e;">
                   <logout-outlined /> Выйти
@@ -111,14 +125,14 @@ import {
 export default {
   components: {
     DownOutlined, RocketFilled, UserOutlined, BellFilled, MessageFilled,
-    SmileOutlined, LogoutOutlined
+    SmileOutlined, LogoutOutlined, BankFilled
   },
   setup() {
     const router = useRouter();
     const route = useRoute();
     const current = ref(['home']);
     const user = ref(null);
-    const avatarUrl = ref(null); // Отдельная переменная для аватара
+    const avatarUrl = ref(null);
     const menuItems = ref([]);
     const isScrolled = ref(false);
 
@@ -138,19 +152,33 @@ export default {
       try { const r = await api.get('/messages/unread'); msgCount.value = r.data.count; } catch (e) {}
     };
 
-    // ЗАГРУЗКА СВЕЖЕГО ПРОФИЛЯ (ДЛЯ АВАТАРА)
+    // ЗАГРУЗКА АВАТАРА В ЗАВИСИМОСТИ ОТ РОЛИ
     const fetchUserProfile = async () => {
         if (!user.value) return;
-        // Если это студент, грузим профиль, чтобы взять аватар
-        if (user.value.role === 'graduate') {
-            try {
-                const r = await api.get('/graduates/me');
-                if (r.data && r.data.avatar_url) {
+        try {
+            // Определяем эндпоинт в зависимости от роли
+            const endpoint = user.value.role === 'employer' ? '/recruiters/me' : '/graduates/me';
+
+            const r = await api.get(endpoint);
+
+            if (r.data) {
+                // 1. Обновляем Аватар
+                if (r.data.avatar_url) {
                     avatarUrl.value = `http://localhost:4000${r.data.avatar_url}`;
                 }
-            } catch (e) {}
+
+                // 2. ОБНОВЛЯЕМ ИМЯ В НАВБАРЕ
+                if (r.data.first_name) {
+                    user.value.first_name = r.data.first_name;
+                    user.value.last_name = r.data.last_name; // на всякий случай
+
+                    // 3. Обновляем localStorage, чтобы при перезагрузке имя не пропадало на секунду
+                    localStorage.setItem('user', JSON.stringify(user.value));
+                }
+            }
+        } catch (e) {
+            console.error("Ошибка загрузки профиля:", e);
         }
-        // Если работодатель, можно загрузить лого компании, но пока оставим дефолт
     };
 
     const markRead = async (item) => {
@@ -188,7 +216,7 @@ export default {
 
       loadNotifications();
       loadMsgCount();
-      fetchUserProfile(); // <--- Загружаем аватарку
+      fetchUserProfile();
     };
 
     onMounted(() => {
@@ -218,11 +246,6 @@ export default {
       if (e.key === 'employer') router.push('/employer');
     };
 
-    const goToProfile = () => {
-      if (user.value.role === 'employer') router.push('/employer');
-      else router.push('/profile');
-    };
-
     const logout = () => {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
@@ -231,7 +254,7 @@ export default {
       setTimeout(() => window.location.reload(), 100);
     };
 
-    return { current, menuItems, handleMenuClick, user, logout, goToProfile, notifications, unreadCount, markRead, respond, msgCount, isScrolled, avatarUrl };
+    return { current, menuItems, handleMenuClick, user, logout, notifications, unreadCount, markRead, respond, msgCount, isScrolled, avatarUrl };
   }
 };
 </script>
@@ -248,8 +271,8 @@ export default {
 .navbar-container { max-width: 1200px; margin: 0 auto; height: 70px; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; }
 
 .logo { display: flex; align-items: center; cursor: pointer; gap: 10px; }
-.logo-icon { width: 36px; height: 36px; background: var(--primary-gradient); border-radius: 10px; display: flex; align-items: center; justify-content: center; color: white; font-size: 20px; box-shadow: 0 4px 10px rgba(118, 75, 162, 0.3); }
-.logo-text { font-size: 1.2rem; font-weight: 800; background: var(--primary-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent; letter-spacing: -0.5px; }
+.logo-icon { width: 36px; height: 36px; background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%); border-radius: 10px; display: flex; align-items: center; justify-content: center; color: white; font-size: 20px; box-shadow: 0 4px 10px rgba(118, 75, 162, 0.3); }
+.logo-text { font-size: 1.2rem; font-weight: 800; background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; letter-spacing: -0.5px; }
 
 .nav-menu { flex: 1; display: flex; justify-content: center; }
 .custom-menu { background: transparent; border-bottom: none; font-weight: 500; width: auto; }

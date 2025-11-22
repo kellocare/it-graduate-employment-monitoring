@@ -1,7 +1,9 @@
+require('dotenv').config();
 const { OpenAI } = require("openai");
 
 class AiService {
     constructor() {
+        console.log("Groq Key check:", process.env.GROQ_API_KEY ? "Ключ есть" : "КЛЮЧ ОТСУТСТВУЕТ!");
         this.client = new OpenAI({
             baseURL: "https://api.groq.com/openai/v1",
             apiKey: process.env.GROQ_API_KEY,

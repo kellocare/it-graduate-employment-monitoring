@@ -7,7 +7,7 @@ import { ref, onMounted, onUnmounted, computed } from 'vue';
 
 export default {
   setup() {
-    // Начальная позиция - середина экрана (чтобы не вылетал из угла)
+    // Начальная позиция - середина экрана
     const posX = ref(window.innerWidth / 2);
     const posY = ref(window.innerHeight / 2);
     const mouseX = ref(window.innerWidth / 2);
@@ -29,7 +29,6 @@ export default {
 
       // Проверка наведения на интерактивные элементы
       const target = e.target;
-      // Ищем ближайшего родителя, который является кнопкой или ссылкой
       if (
          target.tagName === 'A' ||
          target.tagName === 'BUTTON' ||
@@ -65,23 +64,17 @@ export default {
 <style scoped>
 .magic-cursor-follower {
   position: fixed;
-  top: -15px; /* Центрирование (половина ширины) */
+  top: -15px;
   left: -15px;
   width: 30px;
   height: 30px;
-
-  /* Стиль круга */
   border: 2px solid #764ba2;
   border-radius: 50%;
-
-  /* Важно: поверх всего и прозрачный для кликов */
   z-index: 99999;
   pointer-events: none;
-
   transition: width 0.3s, height 0.3s, background-color 0.3s, border-color 0.3s, top 0.3s, left 0.3s;
 }
 
-/* Состояние при наведении */
 .magic-cursor-follower.hovered {
   width: 50px;
   height: 50px;

@@ -1,14 +1,14 @@
 const db = require('../db');
 const aiService = require('../services/aiService');
+const pdf = require('pdf-parse'); // Теперь это точно будет функция
 
 class ChatController {
 
-    // Получить историю переписки
     async getHistory(req, res) {
         try {
             const userId = req.user.id;
             const history = await db.query(
-                'SELECT role, content, created_at FROM chat_messages WHERE user_id = $1 ORDER BY created_at ASC',
+                'SELECT role, content, created_at FROM chat_messages WHERE user_id = $1 ORDER BY created_at ASC LIMIT 50',
                 [userId]
             );
             res.json(history.rows);
@@ -18,87 +18,69 @@ class ChatController {
         }
     }
 
-    // Отправить сообщение
-    async sendMessage(req, res) {
+    // --- МЕТОД ЗАГРУЗКИ PDF ---
+    async uploadResume(req, res) {
         try {
-            const userId = req.user.id;
-            const { message } = req.body;
-
-            // 1. Сохраняем сообщение пользователя
-            await db.query(
-                'INSERT INTO chat_messages (user_id, role, content) VALUES ($1, $2, $3)',
-                [userId, 'user', message]
-            );
-
-            // 2. Получаем список вакансий (контекст рынка)
-            const vacanciesRes = await db.query(`
-                SELECT v.id, v.title, c.name as company, v.salary_min, v.description 
-                FROM vacancies v
-                JOIN companies c ON v.company_id = c.id
-            `);
-
-            const vacanciesList = vacanciesRes.rows.map(v =>
-                `- ID ${v.id}: "${v.title}" в "${v.company}" (${v.salary_min ? 'от ' + v.salary_min : 'з/п не указана'}). Описание: ${v.description.substring(0, 150)}...`
-            ).join('\n');
-            const vacanciesContext = vacanciesList.length > 0 ? vacanciesList : "В данный момент вакансий нет.";
-
-            // 3. --- НОВОЕ: Получаем профиль студента (контекст личности) ---
-            const gradRes = await db.query(`
-                SELECT g.first_name, g.last_name, g.about_me, g.portfolio_links, s.name as specialty_name
-                FROM graduates g
-                LEFT JOIN specialties s ON g.specialty_id = s.id
-                WHERE g.user_id = $1
-            `, [userId]);
-
-            const student = gradRes.rows[0];
-            let studentInfo = "Данные о студенте не заполнены.";
-
-            if (student) {
-                // Формируем читаемый текст для ИИ
-                studentInfo = `Имя: ${student.first_name} ${student.last_name}\n`;
-                studentInfo += `Специальность: ${student.specialty_name || 'Не указана'}\n`;
-                studentInfo += `О себе (навыки, опыт): "${student.about_me || 'Не заполнено'}"\n`;
-
-                // Добавляем типы ссылок из портфолио (например, есть ли GitHub)
-                if (student.portfolio_links && Array.isArray(student.portfolio_links)) {
-                    const links = student.portfolio_links.map(l => l.type).join(', ');
-                    if (links) studentInfo += `Портфолио содержит ссылки на: ${links}`;
-                }
+            // Проверяем файл
+            if (!req.file || !req.file.buffer) {
+                return res.status(400).json({ message: 'Файл не загружен' });
             }
 
-            // 4. Получаем историю переписки
+            const userId = req.user.id;
+            const buffer = req.file.buffer;
+
+            // 1. Парсим PDF (теперь это просто вызов функции)
+            let extractedText = "";
+            try {
+                const data = await pdf(buffer);
+                extractedText = data.text;
+            } catch (pdfError) {
+                console.error("Ошибка внутри pdf-parse:", pdfError);
+                return res.status(500).json({ message: 'Не удалось прочитать PDF файл. Возможно, он поврежден.' });
+            }
+
+            // Проверяем, есть ли текст
+            if (!extractedText || extractedText.trim().length < 5) {
+                return res.status(400).json({ message: 'PDF пустой или состоит только из картинок (скан).' });
+            }
+
+            // 2. Формируем сообщение
+            const userMessage = `[ПОЛЬЗОВАТЕЛЬ ЗАГРУЗИЛ PDF РЕЗЮМЕ]\n\nТекст из файла:\n${extractedText}`;
+
+            // 3. Сохраняем сообщение пользователя в базу
+            await db.query(
+                'INSERT INTO chat_messages (user_id, role, content) VALUES ($1, $2, $3)',
+                [userId, 'user', userMessage]
+            );
+
+            // 4. Готовим промпт для ИИ
+            const systemPrompt = `Ты — профессиональный рекрутер и эксперт по резюме.
+            Пользователь прислал текст своего резюме (распознанный из PDF).
+            
+            ТВОЯ ЗАДАЧА:
+            1. Проанализируй структуру и содержание.
+            2. Найди слабые места (отсутствие конкретики, ошибки стиля).
+            3. Оцени резюме по шкале 1-10.
+            4. Дай 3-4 конкретных совета, как улучшить резюме, чтобы пройти отбор в IT-компанию.
+            
+            Отвечай на русском языке. Используй Markdown (жирный шрифт, списки) для красивого оформления.`;
+
+            // История (контекст)
             const historyRes = await db.query(
-                'SELECT role, content FROM chat_messages WHERE user_id = $1 ORDER BY created_at DESC LIMIT 10',
+                'SELECT role, content FROM chat_messages WHERE user_id = $1 ORDER BY created_at DESC LIMIT 4',
                 [userId]
             );
             const recentHistory = historyRes.rows.reverse();
 
-            // 5. Собираем СУПЕР-ПРОМПТ
             const messagesForAi = [
-                {
-                    role: "system",
-                    content: `Ты — карьерный консультант.
-                    
-                    ИНФОРМАЦИЯ О СТУДЕНТЕ, С КОТОРЫМ ТЫ ОБЩАЕШЬСЯ:
-                    ${studentInfo}
-                    
-                    СПИСОК ДОСТУПНЫХ ВАКАНСИЙ:
-                    ${vacanciesContext}
-                    
-                    Твоя задача:
-                    1. Используй информацию "О себе" студента, чтобы сразу предлагать релевантные вещи. Не спрашивай то, что уже написано в профиле (например, если он написал "Знаю Python", не спрашивай "Какой язык ты знаешь?").
-                    2. Если студент не заполнил поле "О себе", вежливо попроси рассказать о навыках.
-                    3. Рекомендуй вакансии из списка выше, если они подходят.
-                    
-                    Будь краток, полезен и профессионален.`
-                },
+                { role: "system", content: systemPrompt },
                 ...recentHistory.map(msg => ({ role: msg.role, content: msg.content }))
             ];
 
-            // 6. Спрашиваем ИИ
+            // Запрос к ИИ
             const aiAnswer = await aiService.getCompletion(messagesForAi);
 
-            // 7. Сохраняем ответ
+            // Сохраняем ответ ИИ
             const savedAiMsg = await db.query(
                 'INSERT INTO chat_messages (user_id, role, content) VALUES ($1, $2, $3) RETURNING *',
                 [userId, 'assistant', aiAnswer]
@@ -107,20 +89,67 @@ class ChatController {
             res.json(savedAiMsg.rows[0]);
 
         } catch (e) {
-            console.error(e);
-            res.status(500).json({ message: 'Ошибка чата' });
+            console.error("Upload Error:", e);
+            res.status(500).json({ message: 'Ошибка обработки файла' });
         }
     }
 
-    // Очистить историю (начать сначала)
+    // Обычная отправка сообщений
+    async sendMessage(req, res) {
+        try {
+            const userId = req.user.id;
+            const { message, mode } = req.body;
+            const currentMode = mode || 'vacancy';
+
+            // Сохраняем сообщение
+            await db.query('INSERT INTO chat_messages (user_id, role, content) VALUES ($1, $2, $3)', [userId, 'user', message]);
+
+            // Получаем данные студента
+            const gradRes = await db.query(`
+                SELECT g.first_name, g.last_name, g.about_me, g.portfolio_links, s.name as specialty_name
+                FROM graduates g
+                LEFT JOIN specialties s ON g.specialty_id = s.id
+                WHERE g.user_id = $1
+            `, [userId]);
+
+            const student = gradRes.rows[0] || {};
+            let studentInfo = `Имя: ${student.first_name} ${student.last_name}. О себе: ${student.about_me || 'Не заполнено'}`;
+
+            // Выбираем режим
+            let systemPrompt = "";
+            if (currentMode === 'resume') {
+                systemPrompt = `Ты — эксперт по резюме (CV Reviewer). 
+                Данные студента: ${studentInfo}.
+                Помогай улучшать резюме, критикуй конструктивно. Не предлагай вакансии в этом режиме.`;
+            } else {
+                const vacanciesRes = await db.query('SELECT id, title, description FROM vacancies ORDER BY created_at DESC LIMIT 20');
+                const vacs = vacanciesRes.rows.map(v => `${v.title}: ${v.description.substring(0,120)}...`).join('\n');
+                systemPrompt = `Ты — карьерный консультант. Список вакансий:\n${vacs}\n. Данные студента: ${studentInfo}. Подбирай вакансии.`;
+            }
+
+            // История
+            const historyRes = await db.query('SELECT role, content FROM chat_messages WHERE user_id = $1 ORDER BY created_at DESC LIMIT 6', [userId]);
+            const recentHistory = historyRes.rows.reverse();
+
+            const messagesForAi = [{ role: "system", content: systemPrompt }, ...recentHistory.map(m => ({ role: m.role, content: m.content }))];
+
+            // Ответ ИИ
+            const aiAnswer = await aiService.getCompletion(messagesForAi);
+            const savedAiMsg = await db.query('INSERT INTO chat_messages (user_id, role, content) VALUES ($1, $2, $3) RETURNING *', [userId, 'assistant', aiAnswer]);
+            res.json(savedAiMsg.rows[0]);
+
+        } catch (e) {
+            console.error(e);
+            res.status(500).json({ message: 'Error' });
+        }
+    }
+
     async clearHistory(req, res) {
         try {
             const userId = req.user.id;
             await db.query('DELETE FROM chat_messages WHERE user_id = $1', [userId]);
             res.json({ message: 'История очищена' });
-        } catch (e) {
-            res.status(500).json({ message: 'Ошибка' });
-        }
+        } catch (e) { res.status(500).json({ message: 'Error' }); }
     }
 }
 
