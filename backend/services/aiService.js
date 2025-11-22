@@ -137,6 +137,25 @@ class AiService {
         }
     }
 
+    async generateVacancySummary(title, description) {
+        const prompt = `
+            Проанализируй вакансию "${title}".
+            Описание: "${description}".
+            
+            Напиши краткий инсайт (максимум 3 предложения) для кандидата:
+            1. В чем суть работы (простыми словами).
+            2. Какие главные технологии/навыки критичны.
+            3. Какой тип личности ищется (например, "внимательный к деталям" или "коммуникабельный").
+            
+            Используй эмодзи. Формат: обычный текст, не Markdown.
+        `;
+        try {
+            return await this.getCompletion([{ role: "user", content: prompt }]);
+        } catch (e) {
+            return "ИИ анализирует эту вакансию...";
+        }
+    }
+
     async extractSkills(vacancyDescription) {
         const prompt = `Извлеки технические навыки (hard skills) из текста. Только список через запятую. Текст: "${vacancyDescription}"`;
         const result = await this.getCompletion([{ role: "user", content: prompt }]);

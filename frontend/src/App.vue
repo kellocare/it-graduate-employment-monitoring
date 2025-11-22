@@ -1,6 +1,8 @@
 <template>
+  <MagicCursor />
   <div class="app-layout">
     <Navbar />
+
 
     <div class="main-content">
       <!-- Анимация переходов между страницами -->
