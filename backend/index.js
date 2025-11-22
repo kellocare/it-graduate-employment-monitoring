@@ -1,63 +1,73 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const path = require('path'); // Для работы с путями файлов
 const db = require('./db');
-const authRouter = require('./routes/authRoutes');
-const graduateRouter = require('./routes/graduateRoutes');
-const dictionaryRouter = require('./routes/dictionaryRoutes');
-const employmentRouter = require('./routes/employmentRoutes');
-const analyticsRouter = require('./routes/analyticsRoutes');
-const aiRouter = require('./routes/aiRoutes');
-const vacancyRouter = require('./routes/vacancyRoutes');
-const applicationRouter = require('./routes/applicationRoutes');
-const chatRouter = require('./routes/chatRoutes');
-const employerRouter = require('./routes/employerRoutes');
 
 const app = express();
-const PORT = process.env.PORT || 4000; // Убедись, что тут или в .env стоит 4000
+const PORT = process.env.PORT || 4000;
 
-const path = require('path');
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-
-// 1. Самый разрешающий CORS
-app.use(cors({
-    origin: '*', // Разрешить всем фронтендам
-    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
-}));
-
+// Настройки безопасности (CORS)
+app.use(cors({ origin: '*' })); // Разрешаем запросы с любого фронтенда
 app.use(express.json());
 
-app.use('/api/auth', authRouter);
-app.use('/api/graduates', graduateRouter);
-app.use('/api/dict', dictionaryRouter);
-app.use('/api/employment', employmentRouter);
-app.use('/api/analytics', analyticsRouter);
-app.use('/api/ai', aiRouter);
-app.use('/api/vacancies', vacancyRouter);
-app.use('/api/applications', applicationRouter);
-app.use('/api/chat', chatRouter);
-app.use('/api/employer', employerRouter);
+// Делаем папку uploads доступной для браузера (чтобы видеть аватарки)
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// ==============================================
+// ПОДКЛЮЧЕНИЕ ВСЕХ МАРШРУТОВ (РОУТОВ)
+// ==============================================
+
+// 1. Авторизация и пользователи
+app.use('/api/auth', require('./routes/authRoutes'));
+
+// 2. Профиль выпускника
+app.use('/api/graduates', require('./routes/graduateRoutes'));
+
+// 3. Справочники (города, компании, навыки)
+app.use('/api/dict', require('./routes/dictionaryRoutes'));
+
+// 4. Опыт работы (Трудоустройство) - ТУТ БЫЛА ОШИБКА 404
+app.use('/api/employment', require('./routes/employmentRoutes'));
+
+// 5. Аналитика для дашборда
+app.use('/api/analytics', require('./routes/analyticsRoutes'));
+
+// 6. Искусственный интеллект
+app.use('/api/ai', require('./routes/aiRoutes'));
+
+// 7. Вакансии
+app.use('/api/vacancies', require('./routes/vacancyRoutes'));
+
+// 8. Отклики и Тестирование
+app.use('/api/applications', require('./routes/applicationRoutes'));
+
+// 9. Чат-бот (AI консультант)
+app.use('/api/chat', require('./routes/chatRoutes'));
+
+// 10. Кабинет Работодателя (Компании) - ТУТ БЫЛА ОШИБКА 404
+app.use('/api/employer', require('./routes/employerRoutes'));
+
+// 11. Поиск кандидатов (для HR)
 app.use('/api/candidates', require('./routes/candidateRoutes'));
+
+// 12. Уведомления
 app.use('/api/notifications', require('./routes/notificationRoutes'));
+
+// 13. Приглашения
 app.use('/api/invites', require('./routes/inviteRoutes'));
+
+// 14. Личные сообщения (Мессенджер)
 app.use('/api/messages', require('./routes/messagesRoutes'));
 
+// ==============================================
 
+// Тестовый маршрут (проверка жизни сервера)
 app.get('/', (req, res) => {
-    res.json({ message: 'Server is working correctly!' });
+    res.json({ message: 'Server is running correctly!' });
 });
 
-// ... твой тест базы ...
-app.get('/api/test-db', async (req, res) => {
-    try {
-        const result = await db.query('SELECT NOW()');
-        res.json({ message: 'Database connection successful', time: result.rows[0].now });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// 2. Слушаем на 0.0.0.0 (IPv4 принудительно)
-const server = app.listen(PORT, '0.0.0.0', () => {
+// Запуск сервера
+app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server started on port ${PORT}`);
 });

@@ -3,7 +3,6 @@
     <header class="page-header">
       <h1><solution-outlined /> Биржа вакансий</h1>
 
-      <!-- КНОПКИ -->
       <div class="actions">
         <button
           v-if="user && user.role !== 'graduate'"
@@ -18,36 +17,34 @@
 
     <!-- Форма создания вакансии -->
     <div v-if="showCreateForm && user && user.role !== 'graduate'" class="create-card">
-      <h3>Новая вакансия (AI анализ включен <robot-outlined />)</h3>
+
+      <div class="form-header-row">
+        <h3>Новая вакансия</h3>
+
+        <!-- ТУМБЛЕР AI -->
+        <div class="ai-toggle-wrapper">
+          <span>AI Анализ навыков:</span>
+          <a-switch v-model:checked="useAi" checked-children="ВКЛ" un-checked-children="ВЫКЛ" />
+        </div>
+      </div>
+
       <form @submit.prevent="createVacancy">
         <div class="form-group">
           <label>Компания</label>
-
-          <!-- ВАРИАНТ 1: Если это Работодатель — показываем только текст (или disabled input) -->
           <div v-if="user.role === 'employer'">
-             <a-input
-               v-if="employersCompany"
-               :value="employersCompany.name"
-               disabled
-               style="color: #333; font-weight: bold;"
-             />
+             <a-input v-if="employersCompany" :value="employersCompany.name" disabled style="color: #333; font-weight: bold;" />
              <a-alert v-else message="Сначала создайте профиль компании в кабинете!" type="error" show-icon />
           </div>
-
-          <!-- ВАРИАНТ 2: Если это Админ — даем выбор из списка -->
-          <a-select
-            v-else
-            v-model:value="form.company_id"
-            placeholder="Выберите компанию"
-            style="width: 100%"
-          >
+          <a-select v-else v-model:value="form.company_id" placeholder="Выберите компанию" style="width: 100%">
             <a-select-option v-for="c in companies" :key="c.id" :value="c.id">{{ c.name }}</a-select-option>
           </a-select>
         </div>
+
         <div class="form-group">
           <label>Название должности</label>
           <a-input v-model:value="form.title" placeholder="Python Developer" />
         </div>
+
         <div class="form-row">
           <div class="form-group">
             <label>Мин. зарплата</label>
@@ -58,13 +55,26 @@
             <a-input v-model:value="form.contact_email" />
           </div>
         </div>
+
         <div class="form-group">
           <label>Описание</label>
-          <a-textarea v-model:value="form.description" :rows="5" />
+          <a-textarea v-model:value="form.description" :rows="5" placeholder="Опишите задачи и требования..." />
         </div>
+
+        <!-- ПОЛЕ РУЧНОГО ВВОДА НАВЫКОВ (Если AI выключен) -->
+        <div class="form-group" v-if="!useAi">
+          <label>Ключевые навыки (через запятую)</label>
+          <a-input v-model:value="manualSkills" placeholder="Например: Python, Django, PostgreSQL, Docker" />
+          <span class="hint">Введите навыки вручную, и они будут прикреплены к вакансии.</span>
+        </div>
+
+        <div class="form-group" v-else>
+           <a-alert type="info" show-icon message="ИИ автоматически проанализирует описание и выделит навыки после публикации." banner />
+        </div>
+
         <button type="submit" class="btn-save" :disabled="aiLoading">
           <loading-outlined v-if="aiLoading" />
-          {{ aiLoading ? ' ИИ анализирует...' : 'Опубликовать' }}
+          {{ aiLoading ? ' Обработка...' : 'Опубликовать' }}
         </button>
       </form>
     </div>
@@ -88,86 +98,63 @@
 
         <div class="vac-footer">
           <span class="date"><calendar-outlined /> {{ formatDate(vac.created_at) }}</span>
-
-          <button
-            v-if="user && user.role === 'graduate'"
-            class="btn-apply"
-            @click="startApplication(vac.id)"
-          >
+          <button v-if="user && user.role === 'graduate'" class="btn-apply" @click="startApplication(vac.id)">
             Откликнуться (Пройти тест)
           </button>
         </div>
       </div>
     </div>
 
-    <!-- МОДАЛЬНОЕ ОКНО -->
-    <div v-if="showTestModal" class="modal-overlay">
-      <div class="modal-content">
-
-        <!-- 1. Загрузка -->
+    <!-- МОДАЛЬНОЕ ОКНО ТЕСТА (Оставляем без изменений) -->
+    <a-modal v-model:open="showTestModal" :footer="null" width="600px">
+      <div class="modal-content-wrapper">
         <div v-if="testLoading" class="modal-body center">
           <div class="spinner-icon"><robot-outlined spin /></div>
           <h3>ИИ генерирует тестовое задание...</h3>
           <p>Пожалуйста, подождите, это может занять 10-15 секунд.</p>
         </div>
-
-        <!-- 2. Форма с вопросами -->
         <div v-else-if="currentApplication && !testResult" class="modal-body">
           <h3><form-outlined /> Отклик на вакансию</h3>
           <p class="subtitle">Заполните форму, чтобы отправить заявку работодателю.</p>
-
           <div class="form-group mt-20">
             <label>Сопроводительное письмо (по желанию)</label>
             <a-textarea v-model:value="coverLetter" :rows="3" placeholder="Расскажите, почему вы хотите работать у нас..." />
           </div>
-
           <a-divider />
-
           <h4><thunderbolt-two-tone two-tone-color="#fa8c16" /> Блиц-тест от ИИ</h4>
-
           <div class="questions-list">
              <div v-for="(question, index) in currentApplication.test_tasks" :key="index" class="question-item">
               <p class="q-text"><strong>Вопрос {{ index + 1 }}:</strong> {{ question }}</p>
               <a-textarea v-model:value="studentAnswers[index]" :rows="2" placeholder="Ваш ответ..." />
             </div>
           </div>
-
           <div class="modal-actions">
             <button class="btn-submit" @click="submitAnswers" :disabled="submitting">
-              <loading-outlined v-if="submitting" />
-              {{ submitting ? ' Проверка...' : 'Отправить отклик' }}
+              <loading-outlined v-if="submitting" /> {{ submitting ? ' Проверка...' : 'Отправить отклик' }}
             </button>
             <button class="btn-close-text" @click="cancelAndClose">Отмена</button>
           </div>
         </div>
-
-        <!-- 3. Результат -->
         <div v-else-if="testResult" class="modal-body result-box" :class="testResult.status">
           <div class="score-circle">{{ testResult.ai_score }}</div>
-
           <div v-if="testResult.status === 'accepted'">
             <h3><check-circle-two-tone two-tone-color="#52c41a" /> Заявка успешно отправлена!</h3>
-            <p class="result-msg">Поздравляем! Ваши ответы прошли автоматическую проверку. Мы передали вашу анкету работодателю.</p>
-            <p class="small-text">Ждите ответа на email: {{ user.email }}</p>
+            <p class="result-msg">Поздравляем! Ваши ответы прошли автоматическую проверку.</p>
           </div>
-
           <div v-else>
             <h3><close-circle-two-tone two-tone-color="#eb2f96" /> Не пройдено</h3>
             <p class="result-msg">К сожалению, автоматическая система оценила ваши ответы ниже проходного балла.</p>
-            <p class="small-text">Вы можете попробовать откликнуться снова (текущая попытка будет удалена).</p>
           </div>
-
           <button class="btn-close-main" @click="closeModal">Закрыть</button>
         </div>
-
       </div>
-    </div>
+    </a-modal>
   </div>
 </template>
 
 <script>
 import api from '../axios';
-// Импортируем иконки
+import { message } from 'ant-design-vue';
 import {
   SolutionOutlined, PlusOutlined, RobotOutlined, LoadingOutlined,
   BankOutlined, CalendarOutlined, FormOutlined,
@@ -188,31 +175,31 @@ export default {
       loading: true,
       aiLoading: false,
       showCreateForm: false,
+      employersCompany: null,
+
+      // НОВЫЕ ПОЛЯ
+      useAi: true,
+      manualSkills: '',
 
       showTestModal: false,
       testLoading: false,
       submitting: false,
-      employersCompany: null,
-
       currentApplication: null,
       studentAnswers: [],
       coverLetter: '',
       testResult: null,
-
       form: { company_id: null, title: '', description: '', salary_min: null, contact_email: '' }
     };
   },
   async mounted() {
     const userData = localStorage.getItem('user');
-    if (userData) {
-      this.user = JSON.parse(userData);
-    }
+    if (userData) this.user = JSON.parse(userData);
+
     if (this.user && this.user.role === 'employer') {
        try {
          const r = await api.get('/employer/company');
          this.employersCompany = r.data;
-         // Автоматически выбираем его компанию в форме
-         if (this.employersCompany) {
+         if (this.employersCompany && this.employersCompany.id) {
              this.form.company_id = this.employersCompany.id;
          }
        } catch (e) {}
@@ -224,24 +211,38 @@ export default {
       try { const r = await api.get('/vacancies'); this.vacancies = r.data; }
       catch (e) { console.error(e); } finally { this.loading = false; }
     },
-    async loadCompanies() {
-      try { const r = await api.get('/dict/companies'); this.companies = r.data; } catch (e) {}
-    },
+    async loadCompanies() { try { const r = await api.get('/dict/companies'); this.companies = r.data; } catch (e) {} },
+
     async createVacancy() {
-      this.aiLoading = true;
-      if (this.user.role === 'employer' && !this.employersCompany) {
-          alert('Пожалуйста, заполните профиль компании в личном кабинете.');
+      if (this.user.role === 'employer' && (!this.employersCompany || !this.employersCompany.id)) {
+          message.warning('Пожалуйста, заполните профиль компании в личном кабинете.');
           this.$router.push('/employer');
           return;
       }
+
       this.aiLoading = true;
       try {
-        await api.post('/vacancies', this.form);
-        alert('Вакансия создана!');
+        // ОТПРАВЛЯЕМ НОВЫЕ ФЛАГИ
+        await api.post('/vacancies', {
+            ...this.form,
+            use_ai: this.useAi,
+            manual_skills: this.manualSkills
+        });
+
+        message.success('Вакансия успешно создана!');
         this.showCreateForm = false;
-        this.form = { company_id: null, title: '', description: '', salary_min: null, contact_email: '' };
+
+        // Сброс формы
+        this.form = { company_id: this.employersCompany?.id || null, title: '', description: '', salary_min: null, contact_email: '' };
+        this.manualSkills = '';
+        this.useAi = true;
+
         await this.loadVacancies();
-      } catch (e) { alert('Ошибка создания'); } finally { this.aiLoading = false; }
+      } catch (e) {
+          message.error('Ошибка при создании вакансии');
+      } finally {
+          this.aiLoading = false;
+      }
     },
 
     async startApplication(vacancyId) {
@@ -251,64 +252,36 @@ export default {
       this.testResult = null;
       this.studentAnswers = [];
       this.coverLetter = '';
-
       try {
         const response = await api.post('/applications/start', { vacancy_id: vacancyId });
         this.currentApplication = response.data;
-
         let tasks = this.currentApplication.test_tasks;
-        if (!tasks) tasks = ['Ошибка. Попробуйте снова.'];
-        else if (typeof tasks === 'string') {
-             try {
-                 if (tasks.startsWith('"')) tasks = JSON.parse(tasks);
-                 tasks = JSON.parse(tasks);
-             } catch(e) { tasks = [tasks]; }
-        }
+        if (!tasks) tasks = ['Ошибка загрузки вопросов.'];
+        else if (typeof tasks === 'string') { try { if (tasks.startsWith('"')) tasks = JSON.parse(tasks); tasks = JSON.parse(tasks); } catch(e) { tasks = [tasks]; } }
         else if (!Array.isArray(tasks)) tasks = [JSON.stringify(tasks)];
-
         this.currentApplication.test_tasks = tasks;
         this.studentAnswers = new Array(tasks.length).fill('');
       } catch (e) {
-        alert(e.response?.data?.message || 'Ошибка.');
+        message.error(e.response?.data?.message || 'Ошибка при создании заявки.');
         this.showTestModal = false;
-      } finally {
-        this.testLoading = false;
-      }
+      } finally { this.testLoading = false; }
     },
 
     async submitAnswers() {
-      if (this.studentAnswers.some(a => a.trim() === '')) {
-        alert('Пожалуйста, ответьте на все вопросы.');
-        return;
-      }
+      if (this.studentAnswers.some(a => a.trim() === '')) return message.warning('Пожалуйста, ответьте на все вопросы.');
       this.submitting = true;
       try {
-        const response = await api.post('/applications/submit', {
-          application_id: this.currentApplication.id,
-          answers: this.studentAnswers,
-          cover_letter: this.coverLetter
-        });
+        const response = await api.post('/applications/submit', { application_id: this.currentApplication.id, answers: this.studentAnswers, cover_letter: this.coverLetter });
         this.testResult = response.data;
-      } catch (e) {
-        alert('Ошибка отправки');
-      } finally {
-        this.submitting = false;
-      }
+      } catch (e) { message.error('Ошибка отправки ответов'); } finally { this.submitting = false; }
     },
-
     async cancelAndClose() {
       if (this.currentApplication && this.currentApplication.id) {
-        try {
-          await api.post('/applications/cancel', { application_id: this.currentApplication.id });
-        } catch (e) { console.error('Ошибка отмены', e); }
+        try { await api.post('/applications/cancel', { application_id: this.currentApplication.id }); } catch (e) {}
       }
       this.closeModal();
     },
-
-    closeModal() {
-      this.showTestModal = false;
-    },
-
+    closeModal() { this.showTestModal = false; },
     formatMoney(val) { return new Intl.NumberFormat('ru-RU').format(val); },
     formatDate(val) { return new Date(val).toLocaleDateString('ru-RU'); }
   }
@@ -316,10 +289,14 @@ export default {
 </script>
 
 <style scoped>
-/* Стили, адаптированные под иконки */
 .page-container { max-width: 900px; margin: 0 auto; padding: 20px; color: #333; }
 .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
 .page-header h1 { color: #2c3e50; margin: 0; display: flex; align-items: center; gap: 10px; }
+
+/* Заголовок формы */
+.form-header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+.form-header-row h3 { margin: 0; color: #333; }
+.ai-toggle-wrapper { display: flex; align-items: center; gap: 10px; font-weight: bold; color: #555; }
 
 button { cursor: pointer; font-family: inherit; }
 .btn-primary { background: #3498db; color: white; padding: 10px 20px; border: none; border-radius: 6px; display: flex; align-items: center; gap: 8px;}
@@ -331,8 +308,8 @@ button { cursor: pointer; font-family: inherit; }
 .form-row { display: flex; gap: 20px; }
 .form-row .form-group { flex: 1; }
 label { display: block; margin-bottom: 5px; font-weight: bold; color: #444; }
+.hint { font-size: 0.85em; color: #888; margin-top: 4px; display: block; }
 
-/* Используем стили Ant Design для инпутов внутри этого компонента через scoped deep, если они не применяются глобально, но мы также используем a-input компоненты в template */
 .vacancy-card { background: #ffffff; color: #333; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 20px; border: 1px solid #eee; }
 .vac-header h2 { margin: 0; color: #2c3e50; }
 .salary { color: #27ae60; font-weight: bold; font-size: 1.1em; }
@@ -348,25 +325,19 @@ label { display: block; margin-bottom: 5px; font-weight: bold; color: #444; }
 .btn-apply:hover { background: #732d91; }
 
 /* Модальное окно */
-.modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.6); display: flex; justify-content: center; align-items: center; z-index: 1000; }
-.modal-content { background: #ffffff; color: #333; padding: 30px; border-radius: 12px; width: 90%; max-width: 600px; max-height: 90vh; overflow-y: auto; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
+.modal-content-wrapper { padding: 10px; color: #333; }
 .center { text-align: center; }
-
-/* Новый спиннер на иконке */
 .spinner-icon { font-size: 3em; color: #1890ff; margin-bottom: 20px; }
-
 .question-item { margin-bottom: 20px; border-bottom: 1px solid #eee; padding-bottom: 15px; }
 .q-text { font-weight: bold; color: #000000; margin-bottom: 10px; font-size: 1.1em; }
-
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
 .btn-submit { background: #27ae60; color: white; padding: 10px 20px; border: none; border-radius: 6px; font-weight: bold; display: flex; align-items: center; gap: 8px; }
 .btn-close-text { background: #e74c3c; border: none; color: white; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: bold; }
-
 .result-box { text-align: center; }
 .score-circle { width: 80px; height: 80px; border-radius: 50%; background: #333; color: white; display: flex; justify-content: center; align-items: center; font-size: 2em; font-weight: bold; margin: 0 auto 20px; }
 .result-box.accepted .score-circle { background: #2ecc71; }
 .result-box.rejected .score-circle { background: #e74c3c; }
-.btn-close-main { background: #333; color: white; padding: 10px 30px; border: none; border-radius: 6px; }
+.btn-close-main { background: #333; color: white; padding: 10px 30px; border: none; border-radius: 6px; margin-top: 20px; }
 .mt-20 { margin-top: 20px; }
 .result-msg { font-size: 1.1em; margin-bottom: 10px; line-height: 1.5; }
 .small-text { font-size: 0.9em; color: #666; }

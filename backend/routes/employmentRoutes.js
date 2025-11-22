@@ -7,5 +7,6 @@ const authMiddleware = require('../middleware/authMiddleware');
 router.post('/', authMiddleware, employmentController.addRecord);
 router.get('/', authMiddleware, employmentController.getMyRecords);
 router.delete('/:id', authMiddleware, employmentController.deleteRecord);
+router.put('/:id', authMiddleware, employmentController.updateRecord);
 
 module.exports = router;

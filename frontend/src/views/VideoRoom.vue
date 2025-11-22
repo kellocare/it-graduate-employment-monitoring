@@ -1,10 +1,18 @@
 <template>
   <div class="video-room-wrapper">
+    <!-- Контейнер для видео -->
     <div ref="root" class="video-container"></div>
 
-    <!-- Кнопка выхода с высоким z-index -->
+    <!-- Кнопка выхода -->
     <div class="custom-controls">
-       <a-button type="primary" danger shape="round" size="large" @click="leaveRoom">
+       <a-button
+         type="primary"
+         danger
+         shape="round"
+         size="large"
+         @click="leaveRoom"
+         class="exit-btn"
+       >
          📴 Завершить звонок и вернуться
        </a-button>
     </div>
@@ -24,12 +32,24 @@ export default {
     let zp = null;
 
     const leaveRoom = () => {
-       if (zp) zp.destroy();
-       router.push('/messages'); // Возвращаемся в чат
+       // 1. Пытаемся уничтожить экземпляр (на всякий случай)
+      if (zp) {
+        try {
+          zp.destroy();
+        } catch (e) {
+        }
+      }
+
+      // 2. ЖЕСТКИЙ ВЫХОД
+      // Используем window.location.href вместо router.push.
+      // Это перезагрузит страницу, гарантированно уберет черный экран,
+      // выключит камеру и вернет кликабельность меню.
+      window.location.href = '/messages';
     };
 
     onMounted(() => {
       const roomId = route.params.roomId;
+
       const userStr = localStorage.getItem('user');
       if (!userStr) {
         router.push('/login');
@@ -37,7 +57,7 @@ export default {
       }
       const user = JSON.parse(userStr);
 
-      // Уникальный ID для каждой сессии, чтобы не выкидывало
+      // Уникальный ID + рандом, чтобы не выкидывало
       const userId = user.id.toString() + '_' + Math.floor(Math.random() * 10000);
       const userName = (user.first_name || 'User') + ' ' + (user.last_name || '');
 
@@ -52,22 +72,30 @@ export default {
 
       zp.joinRoom({
         container: root.value,
-        scenario: {mode: ZegoUIKitPrebuilt.OneONoneCall},
+        scenario: {
+          mode: ZegoUIKitPrebuilt.OneONoneCall,
+        },
         showPreJoinView: false,
         turnOnMicrophoneWhenJoining: true,
         turnOnCameraWhenJoining: true,
         showScreenSharingButton: true,
         showLeaveRoomConfirmDialog: false,
         showUserList: false,
-        // Если пользователь нажал красную кнопку Zego
+
+        // Если пользователь нажал на красную трубку самого Zego интерфейса
         onLeaveRoom: () => {
-          router.push('/messages');
+          window.location.href = '/messages';
         }
       });
     });
 
     onBeforeUnmount(() => {
-      if (zp) zp.destroy();
+      if (zp) {
+        try {
+          zp.destroy();
+        } catch (e) {
+        }
+      }
     });
 
     return {root, leaveRoom};
@@ -78,9 +106,9 @@ export default {
 <style scoped>
 .video-room-wrapper {
   width: 100%;
-  height: calc(100vh - 64px);
+  height: calc(100vh - 64px); /* Высота минус навбар */
   position: relative;
-  background: #000;
+  background: #000; /* Черный фон, пока видео грузится */
 }
 
 .video-container {
@@ -92,6 +120,13 @@ export default {
   position: absolute;
   top: 20px;
   left: 20px;
-  z-index: 99999; /* Очень высокий индекс, чтобы быть поверх видео */
+  z-index: 10000; /* Очень высокий индекс */
+  pointer-events: auto; /* Разрешаем клики */
+}
+
+.exit-btn {
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+  font-weight: bold;
+  border: 2px solid white;
 }
 </style>

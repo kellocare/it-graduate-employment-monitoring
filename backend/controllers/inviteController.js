@@ -1,38 +1,47 @@
 const db = require('../db');
+const testController = require('./testController'); // Импорт для запуска авто-теста
 
 class InviteController {
 
     // Работодатель отправляет приглашение
-    // (Переносим логику из candidateController сюда и улучшаем)
     async sendInvite(req, res) {
         try {
             const senderId = req.user.id;
-            const { candidate_user_id, message } = req.body;
+            const { candidate_user_id, message, vacancy_id } = req.body; // <-- Получаем ID вакансии
 
-            // 1. Создаем запись в invitations
-            await db.query(
-                `INSERT INTO invitations (employer_user_id, student_user_id, status) 
-                 VALUES ($1, $2, 'pending')
-                 ON CONFLICT (employer_user_id, student_user_id) 
-                 DO UPDATE SET status = 'pending'`, // Если уже было - обновляем
-                [senderId, candidate_user_id]
-            );
-
-            // 2. Узнаем название компании
+            // 1. Узнаем название компании
             const compRes = await db.query('SELECT name FROM companies WHERE user_id = $1', [senderId]);
             const companyName = compRes.rows[0]?.name || 'Работодатель';
 
-            // 3. Отправляем уведомление студенту
+            // 2. Узнаем название вакансии (для красивого уведомления)
+            let vacancyTitle = "";
+            if (vacancy_id) {
+                const vacRes = await db.query('SELECT title FROM vacancies WHERE id = $1', [vacancy_id]);
+                if (vacRes.rows.length > 0) {
+                    vacancyTitle = `на вакансию "${vacRes.rows[0].title}"`;
+                }
+            }
+
+            // 3. Создаем/Обновляем запись в invitations с указанием vacancy_id
+            await db.query(
+                `INSERT INTO invitations (employer_user_id, student_user_id, status, vacancy_id) 
+                 VALUES ($1, $2, 'pending', $3)
+                 ON CONFLICT (employer_user_id, student_user_id) 
+                 DO UPDATE SET status = 'pending', vacancy_id = $3, created_at = CURRENT_TIMESTAMP`,
+                [senderId, candidate_user_id, vacancy_id]
+            );
+
+            // 4. Отправляем уведомление студенту
             await db.query(
                 `INSERT INTO notifications (user_id, sender_id, title, message, type) 
                  VALUES ($1, $2, $3, $4, 'invite')`,
-                [candidate_user_id, senderId, `Приглашение от ${companyName}`, message]
+                [candidate_user_id, senderId, `Приглашение от ${companyName}`, `${message} (${vacancyTitle})`]
             );
 
             res.json({ message: 'Приглашение отправлено' });
         } catch (e) {
             console.error(e);
-            res.status(500).json({ message: 'Ошибка отправки' });
+            res.status(500).json({ message: 'Ошибка отправки приглашения' });
         }
     }
 
@@ -59,23 +68,36 @@ class InviteController {
             const studentName = studRes.rows[0] ? `${studRes.rows[0].first_name} ${studRes.rows[0].last_name}` : 'Студент';
 
             if (status === 'accepted') {
-                // ЕСЛИ ПРИНЯЛ:
-                // а) Шлем уведомление работодателю
+                // === ЕСЛИ ПРИНЯЛ ===
+
+                // а) Узнаем vacancy_id из приглашения, чтобы связать чат
+                const inviteRes = await db.query(
+                    'SELECT vacancy_id FROM invitations WHERE employer_user_id = $1 AND student_user_id = $2',
+                    [employer_id, studentId]
+                );
+                const vacancyId = inviteRes.rows[0]?.vacancy_id;
+
+                // б) Шлем уведомление работодателю
                 await db.query(
                     `INSERT INTO notifications (user_id, sender_id, title, message, type) 
                      VALUES ($1, $2, $3, $4, 'success')`,
                     [employer_id, studentId, 'Приглашение принято! 🎉', `${studentName} принял ваше приглашение. Чат создан.`]
                 );
 
-                // б) Создаем первое сообщение в чате (Техническое, чтобы диалог появился)
+                // в) Создаем первое сообщение в чате с привязкой к вакансии
                 await db.query(
-                    `INSERT INTO direct_messages (sender_id, receiver_id, content) 
-                     VALUES ($1, $2, 'Здравствуйте! Я принял ваше приглашение. Готов обсудить детали.')`,
-                    [studentId, employer_id]
+                    `INSERT INTO direct_messages (sender_id, receiver_id, content, vacancy_id) 
+                     VALUES ($1, $2, 'Здравствуйте! Я принял ваше приглашение. Готов обсудить детали.', $3)`,
+                    [studentId, employer_id, vacancyId]
                 );
 
+                // г) Запускаем процесс автоматического тестирования (если есть вакансия)
+                if (vacancyId) {
+                    testController.assignTask(employer_id, studentId);
+                }
+
             } else {
-                // ЕСЛИ ОТКЛОНИЛ:
+                // === ЕСЛИ ОТКЛОНИЛ ===
                 await db.query(
                     `INSERT INTO notifications (user_id, sender_id, title, message, type) 
                      VALUES ($1, $2, $3, $4, 'error')`,
@@ -87,7 +109,7 @@ class InviteController {
 
         } catch (e) {
             console.error(e);
-            res.status(500).json({ message: 'Ошибка ответа' });
+            res.status(500).json({ message: 'Ошибка ответа на приглашение' });
         }
     }
 }

@@ -89,6 +89,54 @@ class AiService {
         }
     }
 
+    async generateComplexTask(vacancyTitle, vacancyDescription) {
+        const prompt = `
+            Ты — Senior Tech Lead. Нам нужно проверить кандидата на позицию "${vacancyTitle}".
+            Описание вакансии: "${vacancyDescription}".
+            
+            Составь подробное Тестовое Задание (Technical Task).
+            
+            Оно должно включать:
+            1. Суть задачи (реальный кейс, например: разработать API, спроектировать БД, написать скрипт анализа).
+            2. Технические требования (стек, библиотеки).
+            3. Что должно быть в результате (код, диаграмма, ссылка на репозиторий).
+            
+            Формат вывода: Красивый MARKDOWN. Используй заголовки, списки, блоки кода.
+            Не пиши вступлений, сразу само задание.
+        `;
+
+        return await this.getCompletion([{ role: "user", content: prompt }]);
+    }
+
+    // 2. Финальная оценка (Блиц + Решение)
+    async evaluateFinal(vacancyTitle, blitzScore, blitzFeedback, solutionText) {
+        const prompt = `
+            Ты — нанимающий менеджер. Прими финальное решение по кандидату на позицию "${vacancyTitle}".
+            
+            ДАННЫЕ:
+            1. Результат блиц-опроса: ${blitzScore}/100. Фидбек: ${blitzFeedback}.
+            2. Решение большого тестового задания (описание от студента или контент): "${solutionText}".
+            
+            ЗАДАЧА:
+            Проанализируй всё вместе. Если блиц был слабый, но тестовое крутое — дай шанс. Если всё плохо — отказ.
+            
+            ВЕРНИ JSON:
+            {
+                "decision": "HIRED" или "REJECTED",
+                "message": "Текст сообщения кандидату от лица компании. Обоснуй решение вежливо и профессионально."
+            }
+        `;
+
+        try {
+            const result = await this.getCompletion([{ role: "user", content: prompt }]);
+            const clean = result.replace(/```json/g, '').replace(/```/g, '').trim();
+            const match = clean.match(/\{[\s\S]*\}/);
+            return JSON.parse(match ? match[0] : clean);
+        } catch (e) {
+            return { decision: "REJECTED", message: "Ошибка анализа. Требуется ручной пересмотр." };
+        }
+    }
+
     async extractSkills(vacancyDescription) {
         const prompt = `Извлеки технические навыки (hard skills) из текста. Только список через запятую. Текст: "${vacancyDescription}"`;
         const result = await this.getCompletion([{ role: "user", content: prompt }]);
