@@ -3,6 +3,10 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path'); // Для работы с путями файлов
 const db = require('./db');
+const newsRouter = require('./routes/newsRoutes');
+const companiesRouter = require('./routes/companiesRoutes');
+const resumeRoutes = require('./routes/resumeRoutes');
+
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -64,10 +68,18 @@ app.use('/api/messages', require('./routes/messagesRoutes'));
 
 app.use('/api/recruiters', require('./routes/recruiterRoutes'));
 
+app.use('/api/admin', require('./routes/adminRoutes'));
+
+app.use('/api/resumes', resumeRoutes)
+
 // Тестовый маршрут (проверка жизни сервера)
 app.get('/', (req, res) => {
     res.json({ message: 'Server is running correctly!' });
 });
+
+app.use('/api/news', newsRouter);
+
+app.use('/api/companies', companiesRouter)
 
 // Запуск сервера
 app.listen(PORT, '0.0.0.0', () => {

@@ -25,12 +25,13 @@ class MessagesController {
                     ORDER BY partner_id, vacancy_id, created_at DESC
                 )
                 SELECT 
-                    lm.partner_id as user_id,  -- <--- ИСПРАВЛЕНИЕ: ЯВНО НАЗЫВАЕМ user_id
+                    lm.partner_id as user_id,
                     lm.vacancy_id,
                     lm.last_message,
                     lm.created_at,
                     lm.is_read,
                     u.email,
+                    u.role,  -- <--- ДОБАВЛЕНО: Получаем роль собеседника
                     COALESCE(c.name, g.first_name || ' ' || g.last_name) as name,
                     g.avatar_url,
                     v.title as vacancy_title

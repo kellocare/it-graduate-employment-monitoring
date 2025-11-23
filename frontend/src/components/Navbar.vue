@@ -1,301 +1,258 @@
 <template>
-  <div class="navbar-wrapper" :class="{ 'scrolled': isScrolled }">
-    <div class="navbar-container">
-      <!-- Логотип -->
-      <div class="logo" @click="$router.push('/')">
-        <div class="logo-icon">
-          <rocket-filled />
-        </div>
-        <span class="logo-text">IT-Monitoring</span>
+  <nav
+    class="sidebar"
+    :class="{ 'expanded': isHovered }"
+    @mouseenter="isHovered = true"
+    @mouseleave="isHovered = false"
+  >
+
+    <!-- ЛОГОТИП -->
+    <div class="logo-wrapper">
+      <div class="logo-box">
+        <rocket-filled />
       </div>
+      <transition name="fade">
+        <span v-if="isHovered" class="logo-text">IT Monitor</span>
+      </transition>
+    </div>
 
-      <!-- Меню -->
-      <div class="nav-menu">
-        <a-menu v-model:selectedKeys="current" mode="horizontal" :items="menuItems" @click="handleMenuClick" class="custom-menu" />
-      </div>
+    <!-- МЕНЮ -->
+    <div class="menu-items">
+      <router-link to="/" class="nav-item" active-class="active">
+        <home-outlined class="nav-icon" />
+        <transition name="fade">
+          <span v-if="isHovered" class="nav-text">Главная</span>
+        </transition>
+      </router-link>
 
-      <!-- Правая часть (Авторизация) -->
-      <div class="auth-actions">
-        <template v-if="user">
+      <router-link to="/vacancies" class="nav-item" active-class="active">
+        <solution-outlined class="nav-icon" />
+        <transition name="fade">
+          <span v-if="isHovered" class="nav-text">Вакансии</span>
+        </transition>
+      </router-link>
 
-          <!-- Иконка сообщений -->
-          <div class="icon-btn" @click="$router.push('/messages')" title="Сообщения">
-             <a-badge :count="msgCount" :offset="[-2, 2]" color="#764ba2">
-               <message-filled style="font-size: 22px; color: #4a5568;" />
-             </a-badge>
-          </div>
+      <router-link to="/roadmap" class="nav-item" active-class="active">
+        <compass-outlined class="nav-icon" />
+        <transition name="fade">
+          <span v-if="isHovered" class="nav-text">Roadmap</span>
+        </transition>
+      </router-link>
 
-          <!-- Уведомления -->
-          <a-popover trigger="click" placement="bottomRight" overlayClassName="notif-popover">
-            <template #content>
-              <div class="notif-list">
-                <div v-if="notifications.length === 0" class="empty-notif">
-                  <smile-outlined style="font-size: 24px; color: #cbd5e0;" />
-                  <p>Нет новых уведомлений</p>
-                </div>
-                <div
-                  v-for="item in notifications"
-                  :key="item.id"
-                  class="notif-item"
-                  :class="{ 'unread': !item.is_read }"
-                >
-                  <div class="notif-header" @click="markRead(item)">
-                     <div class="notif-title">{{ item.title }}</div>
-                     <div class="notif-date">{{ new Date(item.created_at).toLocaleDateString() }}</div>
-                  </div>
-                  <div class="notif-msg" @click="markRead(item)">{{ item.message }}</div>
-                  <div v-if="item.type === 'invite' && !item.is_read" class="invite-actions">
-                    <a-button type="primary" size="small" @click="respond(item, 'accepted')">Принять</a-button>
-                    <a-button danger size="small" @click="respond(item, 'declined')">Отклонить</a-button>
-                  </div>
-                </div>
-              </div>
-            </template>
-            <a-badge :count="unreadCount" class="notif-badge" color="#f56565">
-              <bell-filled style="font-size: 22px; cursor: pointer; color: #4a5568;" />
-            </a-badge>
-          </a-popover>
+      <router-link to="/chat" class="nav-item" active-class="active">
+        <robot-outlined class="nav-icon" />
+        <transition name="fade">
+          <span v-if="isHovered" class="nav-text">AI Ассистент</span>
+        </transition>
+      </router-link>
 
-          <!-- Профиль (Dropdown) -->
-          <a-dropdown placement="bottomRight">
-            <div class="user-profile-btn">
-              <a-avatar
-                :size="36"
-                :src="avatarUrl"
-                style="background-color: #667eea; vertical-align: middle;"
-              >
-                <template v-if="!avatarUrl">
-                  {{ (user.first_name || user.email)[0].toUpperCase() }}
-                </template>
-              </a-avatar>
+      <router-link to="/profile" class="nav-item" active-class="active">
+        <user-outlined class="nav-icon" />
+        <transition name="fade">
+          <span v-if="isHovered" class="nav-text">Профиль</span>
+        </transition>
+      </router-link>
+    </div>
 
-              <span class="user-name">{{ user.first_name || 'Пользователь' }}</span>
-              <down-outlined style="font-size: 10px; color: #718096;" />
-            </div>
-
-            <template #overlay>
-              <a-menu class="profile-menu">
-
-                <!-- ПУНКТЫ МЕНЮ ДЛЯ РАБОТОДАТЕЛЯ -->
-                <template v-if="user.role === 'employer'">
-                  <a-menu-item key="employer" @click="$router.push('/employer')">
-                    <bank-filled /> Кабинет компании
-                  </a-menu-item>
-                  <a-menu-item key="profile" @click="$router.push('/profile')">
-                    <user-outlined /> Мой личный профиль
-                  </a-menu-item>
-                </template>
-
-                <!-- ПУНКТЫ МЕНЮ ДЛЯ СТУДЕНТА -->
-                <template v-else>
-                  <a-menu-item key="profile" @click="$router.push('/profile')">
-                    <user-outlined /> Мой профиль
-                  </a-menu-item>
-                </template>
-
-                <a-menu-divider />
-                <a-menu-item key="logout" @click="logout" style="color: #e53e3e;">
-                  <logout-outlined /> Выйти
-                </a-menu-item>
-              </a-menu>
-            </template>
-          </a-dropdown>
-        </template>
-
-        <template v-else>
-          <a-button type="text" @click="$router.push('/login')" class="btn-login">Войти</a-button>
-          <a-button type="primary" shape="round" @click="$router.push('/login')" class="btn-signup">Регистрация</a-button>
-        </template>
+    <!-- НИЖНЯЯ ЧАСТЬ -->
+    <div class="bottom-section">
+      <div class="nav-item logout-btn" @click="logout">
+        <logout-outlined class="nav-icon" />
+        <transition name="fade">
+          <span v-if="isHovered" class="nav-text">Выход</span>
+        </transition>
       </div>
     </div>
-  </div>
+
+  </nav>
 </template>
 
 <script>
-import { ref, watch, onMounted, computed, h, onUnmounted } from 'vue';
-import { useRouter, useRoute } from 'vue-router';
-import api from '../axios';
-import { message } from 'ant-design-vue';
+import { ref } from 'vue';
+import { useRouter } from 'vue-router';
 import {
-  HomeFilled, AppstoreFilled, RobotFilled, DownOutlined,
-  LineChartOutlined, RocketFilled, BankFilled, UserOutlined,
-  BellFilled, MessageFilled, SmileOutlined, LogoutOutlined
+  RocketFilled, HomeOutlined, SolutionOutlined,
+  CompassOutlined, RobotOutlined, UserOutlined, LogoutOutlined
 } from '@ant-design/icons-vue';
 
 export default {
+  name: 'Navbar',
   components: {
-    DownOutlined, RocketFilled, UserOutlined, BellFilled, MessageFilled,
-    SmileOutlined, LogoutOutlined, BankFilled
+    RocketFilled, HomeOutlined, SolutionOutlined,
+    CompassOutlined, RobotOutlined, UserOutlined, LogoutOutlined
   },
   setup() {
+    const isHovered = ref(false);
     const router = useRouter();
-    const route = useRoute();
-    const current = ref(['home']);
-    const user = ref(null);
-    const avatarUrl = ref(null);
-    const menuItems = ref([]);
-    const isScrolled = ref(false);
-
-    const notifications = ref([]);
-    const unreadCount = computed(() => notifications.value.filter(n => !n.is_read).length);
-    const msgCount = ref(0);
-
-    const handleScroll = () => { isScrolled.value = window.scrollY > 20; };
-
-    const loadNotifications = async () => {
-      if (!user.value) return;
-      try { const r = await api.get('/notifications'); notifications.value = r.data; } catch (e) {}
-    };
-
-    const loadMsgCount = async () => {
-      if (!user.value) return;
-      try { const r = await api.get('/messages/unread'); msgCount.value = r.data.count; } catch (e) {}
-    };
-
-    // ЗАГРУЗКА АВАТАРА В ЗАВИСИМОСТИ ОТ РОЛИ
-    const fetchUserProfile = async () => {
-        if (!user.value) return;
-        try {
-            // Определяем эндпоинт в зависимости от роли
-            const endpoint = user.value.role === 'employer' ? '/recruiters/me' : '/graduates/me';
-
-            const r = await api.get(endpoint);
-
-            if (r.data) {
-                // 1. Обновляем Аватар
-                if (r.data.avatar_url) {
-                    avatarUrl.value = `http://localhost:4000${r.data.avatar_url}`;
-                }
-
-                // 2. ОБНОВЛЯЕМ ИМЯ В НАВБАРЕ
-                if (r.data.first_name) {
-                    user.value.first_name = r.data.first_name;
-                    user.value.last_name = r.data.last_name; // на всякий случай
-
-                    // 3. Обновляем localStorage, чтобы при перезагрузке имя не пропадало на секунду
-                    localStorage.setItem('user', JSON.stringify(user.value));
-                }
-            }
-        } catch (e) {
-            console.error("Ошибка загрузки профиля:", e);
-        }
-    };
-
-    const markRead = async (item) => {
-      if (item.is_read) return;
-      try { await api.post('/notifications/read', { id: item.id }); item.is_read = true; } catch (e) {}
-    };
-
-    const respond = async (item, status) => {
-      try {
-        await api.post('/invites/respond', { notification_id: item.id, employer_id: item.sender_id, status: status });
-        message.success(status === 'accepted' ? 'Приглашение принято!' : 'Приглашение отклонено');
-        item.is_read = true;
-        if (status === 'accepted') router.push('/messages');
-      } catch (e) { message.error('Ошибка'); }
-    };
-
-    const checkUser = () => {
-      const userData = localStorage.getItem('user');
-      user.value = userData ? JSON.parse(userData) : null;
-
-      if (!user.value) return;
-
-      const role = user.value.role;
-
-      const items = [
-        { key: 'home', icon: () => h(HomeFilled), label: 'Главная' },
-        { key: 'vacancies', icon: () => h(AppstoreFilled), label: 'Вакансии' },
-      ];
-
-      if (role === 'graduate') items.push({ key: 'chat', icon: () => h(RobotFilled), label: 'AI Ассистент' });
-      if (role === 'employer') items.push({ key: 'employer', icon: () => h(BankFilled), label: 'Моя компания' });
-      if (role === 'admin' || role === 'university_rep') items.push({ key: 'dashboard', icon: () => h(LineChartOutlined), label: 'Аналитика' });
-
-      menuItems.value = items;
-
-      loadNotifications();
-      loadMsgCount();
-      fetchUserProfile();
-    };
-
-    onMounted(() => {
-      checkUser();
-      window.addEventListener('scroll', handleScroll);
-      setInterval(() => { loadNotifications(); loadMsgCount(); }, 10000);
-    });
-
-    onUnmounted(() => {
-      window.removeEventListener('scroll', handleScroll);
-    });
-
-    watch(() => route.path, (path) => {
-      if (path === '/') current.value = ['home'];
-      else if (path.includes('vacancies')) current.value = ['vacancies'];
-      else if (path.includes('chat')) current.value = ['chat'];
-      else if (path.includes('dashboard')) current.value = ['dashboard'];
-      else if (path.includes('employer')) current.value = ['employer'];
-      else current.value = [];
-    });
-
-    const handleMenuClick = (e) => {
-      if (e.key === 'home') router.push('/');
-      if (e.key === 'vacancies') router.push('/vacancies');
-      if (e.key === 'chat') router.push('/chat');
-      if (e.key === 'dashboard') router.push('/dashboard');
-      if (e.key === 'employer') router.push('/employer');
-    };
 
     const logout = () => {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
-      user.value = null;
       router.push('/login');
-      setTimeout(() => window.location.reload(), 100);
     };
 
-    return { current, menuItems, handleMenuClick, user, logout, notifications, unreadCount, markRead, respond, msgCount, isScrolled, avatarUrl };
+    return { isHovered, logout };
   }
-};
+}
 </script>
 
 <style scoped>
-.navbar-wrapper {
-  position: sticky; top: 0; z-index: 1000; width: 100%;
-  background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(10px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.3);
-  transition: all 0.3s ease;
+/* === БОКОВАЯ ПАНЕЛЬ === */
+.sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 100vh;
+  /* Ширина чуть больше, чтобы контент дышал */
+  width: 80px;
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(20px);
+  border-right: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 5px 0 25px rgba(0, 0, 0, 0.03);
+  z-index: 1000;
+
+  display: flex;
+  flex-direction: column;
+  /* Отступы по краям, чтобы элементы центрировались автоматически */
+  padding: 20px 12px;
+  transition: width 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+  overflow: hidden;
 }
-.navbar-wrapper.scrolled { background: rgba(255, 255, 255, 0.95); box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05); }
 
-.navbar-container { max-width: 1200px; margin: 0 auto; height: 70px; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; }
+/* Расширенное состояние */
+.sidebar.expanded {
+  width: 260px;
+  padding: 20px 15px; /* Чуть меняем паддинги при открытии */
+}
 
-.logo { display: flex; align-items: center; cursor: pointer; gap: 10px; }
-.logo-icon { width: 36px; height: 36px; background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%); border-radius: 10px; display: flex; align-items: center; justify-content: center; color: white; font-size: 20px; box-shadow: 0 4px 10px rgba(118, 75, 162, 0.3); }
-.logo-text { font-size: 1.2rem; font-weight: 800; background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; letter-spacing: -0.5px; }
+/* === ЛОГОТИП === */
+.logo-wrapper {
+  height: 50px;
+  display: flex;
+  align-items: center;
+  margin-bottom: 40px;
+  /* Центрируем лого в свернутом виде */
+  justify-content: center;
+  width: 100%;
+}
+/* Когда меню открыто, логотип уезжает влево */
+.sidebar.expanded .logo-wrapper {
+  justify-content: flex-start;
+  padding-left: 5px;
+}
 
-.nav-menu { flex: 1; display: flex; justify-content: center; }
-.custom-menu { background: transparent; border-bottom: none; font-weight: 500; width: auto; }
+.logo-box {
+  width: 44px;
+  height: 44px;
+  /* Фиксируем размеры, чтобы не прыгало */
+  min-width: 44px;
+  background: linear-gradient(135deg, #6366f1, #a855f7);
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 1.4rem;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+}
 
-.auth-actions { display: flex; align-items: center; gap: 20px; }
-.icon-btn { cursor: pointer; transition: transform 0.2s; }
-.icon-btn:hover { transform: scale(1.1); }
+.logo-text {
+  margin-left: 15px;
+  font-size: 1.3rem;
+  font-weight: 800;
+  background: linear-gradient(135deg, #1f2937, #4b5563);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  white-space: nowrap;
+}
 
-.user-profile-btn { display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 5px 10px; border-radius: 20px; transition: background 0.2s; }
-.user-profile-btn:hover { background: rgba(0, 0, 0, 0.03); }
-.user-name { font-weight: 600; color: #4a5568; }
+/* === МЕНЮ === */
+.menu-items {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
 
-.btn-login { color: #4a5568; font-weight: 600; }
-.btn-signup { font-weight: 600; padding: 0 25px; height: 38px; }
+.nav-item {
+  position: relative;
+  height: 50px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  /* ГЛАВНОЕ ИСПРАВЛЕНИЕ: Центрируем содержимое (иконку) */
+  justify-content: center;
+  border-radius: 16px;
+  text-decoration: none;
+  color: #6b7280;
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
 
-/* Стили уведомлений */
-.notif-list { width: 320px; max-height: 400px; overflow-y: auto; }
-.notif-item { padding: 15px; border-bottom: 1px solid #f0f0f0; cursor: pointer; transition: background 0.2s; }
-.notif-item:hover { background: #f7fafc; }
-.notif-item.unread { background: #ebf8ff; border-left: 3px solid #4299e1; }
-.notif-title { font-weight: 700; color: #2d3748; margin-bottom: 4px; }
-.notif-msg { font-size: 0.9em; color: #718096; line-height: 1.4; }
-.notif-date { font-size: 0.75em; color: #a0aec0; margin-top: 8px; text-align: right; }
-.empty-notif { padding: 30px; text-align: center; color: #a0aec0; display: flex; flex-direction: column; align-items: center; gap: 10px; }
-.invite-actions { margin-top: 10px; display: flex; gap: 10px; justify-content: flex-start; }
+/* Когда меню открыто, выравниваем элементы по левому краю */
+.sidebar.expanded .nav-item {
+  justify-content: flex-start;
+  padding-left: 14px; /* Отступ слева внутри кнопки */
+}
+
+/* Иконка */
+.nav-icon {
+  font-size: 1.4rem;
+  transition: transform 0.2s;
+}
+
+/* Текст */
+.nav-text {
+  margin-left: 16px;
+  font-weight: 600;
+  font-size: 1rem;
+  white-space: nowrap;
+  color: #4b5563;
+}
+
+/* === ЭФФЕКТЫ (HOVER / ACTIVE) === */
+
+/* Наведение */
+.nav-item:hover {
+  background: rgba(99, 102, 241, 0.08);
+  color: #6366f1;
+}
+.nav-item:hover .nav-icon {
+  transform: scale(1.1);
+}
+
+/* Активная вкладка */
+.nav-item.active {
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: white;
+  box-shadow: 0 8px 20px rgba(99, 102, 241, 0.3);
+}
+.nav-item.active .nav-text {
+  color: white;
+}
+
+/* === НИЗ (ВЫХОД) === */
+.bottom-section {
+  border-top: 1px solid rgba(0,0,0,0.06);
+  padding-top: 20px;
+  margin-top: auto;
+  width: 100%;
+}
+
+.logout-btn:hover {
+  background: #fee2e2;
+  color: #ef4444;
+}
+.logout-btn:hover .nav-text {
+  color: #ef4444;
+}
+
+/* АНИМАЦИЯ ТЕКСТА */
+.fade-enter-active, .fade-leave-active {
+  transition: opacity 0.2s ease 0.1s; /* Задержка чтобы меню успело раскрыться */
+}
+.fade-enter-from, .fade-leave-to {
+  opacity: 0;
+}
 </style>
