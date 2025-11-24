@@ -1,6 +1,8 @@
 import axios from 'axios';
 import router from './router';
 
+
+
 const instance = axios.create({
     baseURL: 'http://127.0.0.1:4000/api' // Убедись, что адрес верный
 });
@@ -26,6 +28,24 @@ instance.interceptors.response.use(response => {
         router.push('/login');
     }
     return Promise.reject(error);
+});
+
+instance.interceptors.request.use(config => {
+    const token = localStorage.getItem('token');
+
+    // 🔥 ОТЛАДКА: Смотрим в консоль браузера
+    console.log('--- AXIOS DEBUG ---');
+    console.log('1. Ищу токен в localStorage по ключу "token"');
+    console.log('2. Нашел:', token);
+
+    if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+        console.log('3. Заголовок добавлен:', config.headers.Authorization);
+    } else {
+        console.warn('3. ВНИМАНИЕ: Токена нет, запрос полетит без него!');
+    }
+
+    return config;
 });
 
 export default instance;

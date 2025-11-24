@@ -18,5 +18,8 @@ router.post('/roadmap/save', authMiddleware, chatController.saveRoadmap);      /
 router.get('/roadmap', authMiddleware, chatController.getRoadmap);             // Получение сохраненной
 router.post('/roadmap/archive', authMiddleware, chatController.archiveRoadmap); // Перенести в архив
 router.get('/roadmap/history', authMiddleware, chatController.getRoadmapHistory); // Получить список архива
+router.post('/roadmap/quiz', authMiddleware, chatController.generateNodeQuiz); // Получить задачу
+router.post('/roadmap/check', authMiddleware, chatController.checkNodeQuiz);   // Проверить ответ
+
 
 module.exports = router;

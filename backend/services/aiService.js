@@ -31,7 +31,7 @@ class AiService {
                     messages: messages,
                     // У Groq параметры немного другие, temperature можно оставить
                     temperature: 0.6,
-                    max_tokens: 1024,
+                    max_tokens: 8192,
                 });
 
                 const content = completion.choices[0].message.content;
@@ -113,19 +113,20 @@ class AiService {
     // 2. Финальная оценка (Блиц + Решение)
     async evaluateFinal(vacancyTitle, blitzScore, blitzFeedback, solutionText) {
         const prompt = `
-            Ты — нанимающий менеджер. Прими финальное решение по кандидату на позицию "${vacancyTitle}".
+            Ты — нанимающий менеджер. Прими решение по кандидату на позицию "${vacancyTitle}".
             
             ДАННЫЕ:
-            1. Результат блиц-опроса: ${blitzScore}/100. Фидбек: ${blitzFeedback}.
-            2. Решение большого тестового задания (описание от студента или контент): "${solutionText}".
+            1. Блиц-тест: ${blitzScore}/100. Фидбек: ${blitzFeedback}.
+            2. Тестовое задание (решение): "${solutionText}".
             
             ЗАДАЧА:
-            Проанализируй всё вместе. Если блиц был слабый, но тестовое крутое — дай шанс. Если всё плохо — отказ.
+            Если решение выглядит рабочим и адекватным — рекомендуй интервью.
+            Если решение пустое или бред — отказ.
             
             ВЕРНИ JSON:
             {
-                "decision": "HIRED" или "REJECTED",
-                "message": "Текст сообщения кандидату от лица компании. Обоснуй решение вежливо и профессионально."
+                "decision": "INTERVIEW_RECOMMENDED" или "REJECTED", 
+                "message": "Текст сообщения кандидату. Если ок — напиши, что тестовое принято и ждите приглашения на интервью."
             }
         `;
 
@@ -135,7 +136,7 @@ class AiService {
             const match = clean.match(/\{[\s\S]*\}/);
             return JSON.parse(match ? match[0] : clean);
         } catch (e) {
-            return { decision: "REJECTED", message: "Ошибка анализа. Требуется ручной пересмотр." };
+            return { decision: "REJECTED", message: "Ошибка анализа." };
         }
     }
 

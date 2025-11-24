@@ -3,10 +3,15 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path'); // Для работы с путями файлов
 const db = require('./db');
+
+// Импорт Middleware (ВАЖНО: нужно для защиты роутов)
+const authMiddleware = require('./middleware/authMiddleware');
+
+// Импорт роутеров и контроллеров
 const newsRouter = require('./routes/newsRoutes');
 const companiesRouter = require('./routes/companiesRoutes');
 const resumeRoutes = require('./routes/resumeRoutes');
-
+const interviewController = require('./controllers/interviewController');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -31,7 +36,7 @@ app.use('/api/graduates', require('./routes/graduateRoutes'));
 // 3. Справочники (города, компании, навыки)
 app.use('/api/dict', require('./routes/dictionaryRoutes'));
 
-// 4. Опыт работы (Трудоустройство) - ТУТ БЫЛА ОШИБКА 404
+// 4. Опыт работы (Трудоустройство)
 app.use('/api/employment', require('./routes/employmentRoutes'));
 
 // 5. Аналитика для дашборда
@@ -49,7 +54,7 @@ app.use('/api/applications', require('./routes/applicationRoutes'));
 // 9. Чат-бот (AI консультант)
 app.use('/api/chat', require('./routes/chatRoutes'));
 
-// 10. Кабинет Работодателя (Компании) - ТУТ БЫЛА ОШИБКА 404
+// 10. Кабинет Работодателя (Компании)
 app.use('/api/employer', require('./routes/employerRoutes'));
 
 // 11. Поиск кандидатов (для HR)
@@ -64,22 +69,33 @@ app.use('/api/invites', require('./routes/inviteRoutes'));
 // 14. Личные сообщения (Мессенджер)
 app.use('/api/messages', require('./routes/messagesRoutes'));
 
-// ==============================================
-
+// 15. Рекрутеры
 app.use('/api/recruiters', require('./routes/recruiterRoutes'));
 
+// 16. Админка
 app.use('/api/admin', require('./routes/adminRoutes'));
 
-app.use('/api/resumes', resumeRoutes)
+// 17. Резюме (PDF)
+app.use('/api/resumes', resumeRoutes);
+
+// 18. Новости
+app.use('/api/news', newsRouter);
+
+// 19. Компании (публичный список)
+app.use('/api/companies', companiesRouter);
+
+// ==============================================
+// СПЕЦИАЛЬНЫЕ РОУТЫ (Контроллеры напрямую)
+// ==============================================
+
+// Планирование интервью (добавил /api/ для единообразия)
+app.post('/api/interviews/schedule', authMiddleware, interviewController.schedule);
+
 
 // Тестовый маршрут (проверка жизни сервера)
 app.get('/', (req, res) => {
     res.json({ message: 'Server is running correctly!' });
 });
-
-app.use('/api/news', newsRouter);
-
-app.use('/api/companies', companiesRouter)
 
 // Запуск сервера
 app.listen(PORT, '0.0.0.0', () => {

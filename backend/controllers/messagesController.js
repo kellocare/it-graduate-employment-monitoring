@@ -20,7 +20,7 @@ class MessagesController {
                 ),
                 latest_msg AS (
                     SELECT DISTINCT ON (partner_id, vacancy_id) 
-                        partner_id, vacancy_id, content as last_message, created_at, is_read
+                        partner_id, vacancy_id, content as last_message, created_at, is_read, sender_id
                     FROM my_messages
                     ORDER BY partner_id, vacancy_id, created_at DESC
                 )
@@ -29,11 +29,28 @@ class MessagesController {
                     lm.vacancy_id,
                     lm.last_message,
                     lm.created_at,
-                    lm.is_read,
+                    lm.is_read as last_msg_read_status,
+                    lm.sender_id as last_message_sender_id,
+                    
+                    -- 🔥 ДОБАВЛЕНО: Считаем непрочитанные для КОНКРЕТНОГО диалога (партнер + вакансия)
+                    (
+                        SELECT COUNT(*)::int 
+                        FROM direct_messages dm 
+                        WHERE dm.sender_id = lm.partner_id 
+                        AND dm.receiver_id = $1
+                        AND dm.is_read = FALSE
+                        -- Важно: считаем только сообщения внутри ЭТОЙ вакансии (или общего чата, если null)
+                        AND (dm.vacancy_id = lm.vacancy_id OR (dm.vacancy_id IS NULL AND lm.vacancy_id IS NULL))
+                    ) as unread_count,
+
                     u.email,
-                    u.role,  -- <--- ДОБАВЛЕНО: Получаем роль собеседника
+                    u.role, 
                     COALESCE(c.name, g.first_name || ' ' || g.last_name) as name,
-                    g.avatar_url,
+                    CASE 
+                        WHEN u.role = 'graduate' THEN g.avatar_url
+                        WHEN u.role = 'employer' THEN c.logo_url
+                        ELSE NULL 
+                    END as avatar_url,
                     v.title as vacancy_title
                 FROM latest_msg lm
                 JOIN users u ON lm.partner_id = u.id
@@ -46,66 +63,60 @@ class MessagesController {
             const result = await db.query(query, [userId]);
             res.json(result.rows);
         } catch (e) {
-            console.error(e);
+            console.error("Get Conversations Error:", e);
             res.status(500).json({ message: 'Ошибка загрузки чатов' });
         }
     }
 
-    // Получить переписку
+    // Получить переписку (ОСТАВЛЯЕМ КАК БЫЛО, НО С НЕБОЛЬШОЙ ПРАВКОЙ ДЛЯ БЕЗОПАСНОСТИ)
     async getMessages(req, res) {
         try {
             const userId = req.user.id;
             const { partner_id } = req.params;
             const { vacancy_id } = req.query;
 
-            // ЗАЩИТА ОТ "UNDEFINED"
             if (!partner_id || partner_id === 'undefined') {
                 return res.status(400).json({ message: 'Неверный ID собеседника' });
             }
 
-            let query = `
-                SELECT * FROM direct_messages 
-                WHERE ((sender_id = $1 AND receiver_id = $2) OR (sender_id = $2 AND receiver_id = $1))
-            `;
-
-            const params = [userId, partner_id];
-
-            // Проверяем vacancy_id: он должен быть, и не должен быть строкой "undefined" или "null"
-            if (vacancy_id && vacancy_id !== 'null' && vacancy_id !== 'undefined') {
-                query += ` AND vacancy_id = $3`;
-                params.push(vacancy_id);
-            } else {
-                query += ` AND vacancy_id IS NULL`;
-            }
-
-            query += ` ORDER BY created_at ASC`;
-
-            const msgs = await db.query(query, params);
-
-            // Помечаем прочитанными
+            // 1. Сначала отмечаем сообщения прочитанными (чтобы сразу обновить статус в БД)
             let updateQuery = `
                 UPDATE direct_messages SET is_read = TRUE 
                 WHERE sender_id = $1 AND receiver_id = $2 AND is_read = FALSE
             `;
             const updateParams = [partner_id, userId];
 
+            // Если чат привязан к вакансии, обновляем "прочитано" только в рамках этой вакансии
             if (vacancy_id && vacancy_id !== 'null' && vacancy_id !== 'undefined') {
                 updateQuery += ` AND vacancy_id = $3`;
                 updateParams.push(vacancy_id);
-            } else {
-                updateQuery += ` AND vacancy_id IS NULL`;
+            }
+            await db.query(updateQuery, updateParams);
+
+
+            // 2. Теперь забираем сообщения
+            let query = `
+                SELECT * FROM direct_messages 
+                WHERE ((sender_id = $1 AND receiver_id = $2) OR (sender_id = $2 AND receiver_id = $1))
+            `;
+            const params = [userId, partner_id];
+
+            if (vacancy_id && vacancy_id !== 'null' && vacancy_id !== 'undefined') {
+                query += ` AND vacancy_id = $3`;
+                params.push(vacancy_id);
             }
 
-            await db.query(updateQuery, updateParams);
+            query += ` ORDER BY created_at ASC`;
+            const msgs = await db.query(query, params);
 
             res.json(msgs.rows);
         } catch (e) {
-            console.error(e);
+            console.error("Get Messages Error:", e);
             res.status(500).json({ message: 'Ошибка сообщений' });
         }
     }
 
-    // Отправить сообщение
+    // Отправить сообщение (БЕЗ ИЗМЕНЕНИЙ)
     async sendMessage(req, res) {
         try {
             const senderId = req.user.id;
@@ -118,18 +129,17 @@ class MessagesController {
             );
             res.json(newMsg.rows[0]);
         } catch (e) {
-            console.error(e);
+            console.error("Send Message Error:", e);
             res.status(500).json({ message: 'Ошибка отправки' });
         }
     }
 
-    // Счетчик
+    // Общий счетчик (БЕЗ ИЗМЕНЕНИЙ)
     async getUnreadCount(req, res) {
         try {
-            const userId = req.user.id;
             const result = await db.query(
                 'SELECT COUNT(*) FROM direct_messages WHERE receiver_id = $1 AND is_read = FALSE',
-                [userId]
+                [req.user.id]
             );
             res.json({ count: parseInt(result.rows[0].count) });
         } catch (e) {

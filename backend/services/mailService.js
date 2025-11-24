@@ -41,6 +41,34 @@ class MailService {
             console.error("Ошибка отправки письма:", e);
         }
     }
+
+    async sendInterviewInvite(to, date, link, name) {
+        try {
+            await this.transporter.sendMail({
+                from: `"IT-Monitoring HR" <${process.env.SMTP_USER}>`,
+                to,
+                subject: 'Приглашение на техническое интервью',
+                html: `
+                    <div style="font-family: sans-serif; padding: 20px; border: 1px solid #eee; border-radius: 8px;">
+                        <h2 style="color: #2c3e50;">Здравствуйте, ${name}!</h2>
+                        <p>Ваше тестовое задание успешно прошло проверку.</p>
+                        <p>Мы рады пригласить вас на техническое интервью.</p>
+                        
+                        <div style="background: #f0f9ff; padding: 15px; border-left: 4px solid #1890ff; margin: 20px 0;">
+                            <p style="margin: 5px 0;"><strong>📅 Дата:</strong> ${new Date(date).toLocaleString('ru-RU')}</p>
+                            <p style="margin: 5px 0;"><strong>🔗 Ссылка:</strong> <a href="${link}">${link}</a></p>
+                        </div>
+                        
+                        <p>Пожалуйста, не опаздывайте.</p>
+                        <p style="color: #888; font-size: 12px;">Это автоматическое уведомление.</p>
+                    </div>
+                `
+            });
+            console.log(`Invite sent to ${to}`);
+        } catch (e) {
+            console.error("Mail Error:", e);
+        }
+    }
 }
 
 module.exports = new MailService();

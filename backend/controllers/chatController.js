@@ -19,91 +19,58 @@ class ChatController {
         }
     }
 
-    // --- НОВЫЙ МЕТОД: УЛУЧШЕНИЕ ТЕКСТА РЕЗЮМЕ ---
+    // --- УЛУЧШЕНИЕ ТЕКСТА РЕЗЮМЕ ---
     improveResumeText = async (req, res) => {
         try {
-            console.log("🔄 Start improving text..."); // ЛОГ 1
             const { text } = req.body;
-
-            if (!text) {
-                console.log("❌ No text provided");
-                return res.status(400).json({ message: "Текст не может быть пустым" });
-            }
+            if (!text) return res.status(400).json({ message: "Текст не может быть пустым" });
 
             const prompt = `
                 Ты профессиональный HR-редактор. 
-                Перепиши следующий текст для резюме IT-специалиста более профессиональным, деловым языком.
-                Используй сильные глаголы (разработал, внедрил, оптимизировал).
-                Верни ТОЛЬКО улучшенный текст без кавычек, без вступлений и без Markdown.
-                
+                Перепиши следующий текст для резюме IT-специалиста более профессиональным языком.
+                Верни ТОЛЬКО текст.
                 Текст: "${text}"
             `;
 
-            // Вызов AI
             const improved = await aiService.getCompletion([{ role: 'user', content: prompt }]);
-
-            if (!improved) {
-                throw new Error("Пустой ответ от AI сервиса");
-            }
-
-            // Убираем кавычки и лишние пробелы
             const cleanText = improved.replace(/^"|"$/g, '').trim();
-
-            console.log("✅ AI Success:", cleanText.substring(0, 20) + "..."); // ЛОГ 2
             res.json({ result: cleanText });
-
         } catch (e) {
-            console.error("❌ AI Improve Error DETAILED:", e); // ЛОГ ОШИБКИ
-            res.status(500).json({ message: "Ошибка AI: " + e.message });
+            console.error("Improve Error:", e);
+            res.status(500).json({ message: "Ошибка AI" });
         }
     }
 
     // Загрузка PDF
     uploadResume = async (req, res) => {
         try {
-            if (!req.file || !req.file.buffer) {
-                return res.status(400).json({ message: 'Файл не загружен' });
-            }
-
+            if (!req.file || !req.file.buffer) return res.status(400).json({ message: 'Файл не загружен' });
             const userId = req.user.id;
-
-            // Парсинг PDF
             let extractedText = "";
             try {
                 const data = await pdf(req.file.buffer);
                 extractedText = data.text;
             } catch (pdfError) {
-                console.error("PDF Parse Error:", pdfError);
                 return res.status(500).json({ message: 'Ошибка чтения PDF' });
             }
 
-            if (!extractedText || extractedText.trim().length < 5) {
-                return res.status(400).json({ message: 'PDF пустой' });
-            }
+            if (!extractedText || extractedText.trim().length < 5) return res.status(400).json({ message: 'PDF пустой' });
 
-            const userMessage = `[PDF РЕЗЮМЕ]\n\n${extractedText.substring(0, 200)}...`; // Обрезаем для лога в базе, если нужно
-
-            // Сохраняем сообщение юзера (полный текст или обрезанный - на твое усмотрение, лучше полный)
             await db.query(
                 'INSERT INTO chat_messages (user_id, role, content) VALUES ($1, $2, $3)',
                 [userId, 'user', `[Загружен файл PDF] Текст: ${extractedText}`]
             );
 
             const systemPrompt = `Ты рекрутер. Проанализируй резюме:\n${extractedText}\nДай оценку и советы. Markdown.`;
-
-            // История для контекста
             const historyRes = await db.query('SELECT role, content FROM chat_messages WHERE user_id = $1 ORDER BY created_at DESC LIMIT 4', [userId]);
             const recentHistory = historyRes.rows.reverse();
-
             const messagesForAi = [{ role: "system", content: systemPrompt }, ...recentHistory.map(m => ({ role: m.role, content: m.content }))];
-
             const aiAnswer = await aiService.getCompletion(messagesForAi);
 
             const savedAiMsg = await db.query(
                 'INSERT INTO chat_messages (user_id, role, content) VALUES ($1, $2, $3) RETURNING *',
                 [userId, 'assistant', aiAnswer]
             );
-
             res.json(savedAiMsg.rows[0]);
 
         } catch (e) {
@@ -113,56 +80,32 @@ class ChatController {
     }
 
     // Отправка сообщений
-    async sendMessage(req, res) {
+    sendMessage = async (req, res) => {
         try {
             const userId = req.user.id;
             const { message, mode } = req.body;
             const currentMode = mode || 'vacancy';
 
-            // Сохраняем сообщение пользователя
             await db.query('INSERT INTO chat_messages (user_id, role, content) VALUES ($1, $2, $3)', [userId, 'user', message]);
 
-            // Получаем профиль студента
-            const gradRes = await db.query(`
-                SELECT g.first_name, g.last_name, g.about_me, g.portfolio_links, s.name as specialty_name
-                FROM graduates g
-                LEFT JOIN specialties s ON g.specialty_id = s.id
-                WHERE g.user_id = $1
-            `, [userId]);
-            const student = gradRes.rows[0] || {};
-            const studentName = `${student.first_name || 'Кандидат'}`;
+            const gradRes = await db.query(`SELECT g.first_name FROM graduates g WHERE g.user_id = $1`, [userId]);
+            const studentName = gradRes.rows[0]?.first_name || 'Кандидат';
 
             let systemPrompt = "";
-
-            // --- ЛОГИКА РЕЖИМОВ ---
             if (currentMode === 'resume') {
-                systemPrompt = `Ты — эксперт по резюме. Твоя цель — помочь улучшить описание опыта. Студент: ${studentName}. Будь краток и профессионален.`;
-
+                systemPrompt = `Ты — эксперт по резюме. Студент: ${studentName}. Будь краток.`;
             } else if (currentMode === 'interview') {
-                // НОВЫЙ РЕЖИМ: СОБЕСЕДОВАНИЕ
                 systemPrompt = `
-                    Ты — строгий, но справедливый Технический Интервьюер (Tech Lead).
-                    Твоя задача: Провести короткое собеседование (Mock Interview) со студентом по указанной им теме.
-                    
-                    Правила:
-                    1. Задавай ТОЛЬКО ОДИН вопрос за раз.
-                    2. Жди ответа пользователя. Не отвечай сам за себя.
-                    3. После ответа пользователя, кратко прокомментируй (верно/неверно) и задай следующий вопрос.
-                    4. Всего задай 5 вопросов.
-                    5. После 5-го вопроса напиши "Собеседование завершено" и выдай общую оценку (0-100) и рекомендации.
-                    
-                    Имя кандидата: ${studentName}.
-                    Если пользователь только начал диалог фразой вроде "Хочу собеседование по Java", начни с первого вопроса по этой теме.
+                    Ты — Технический Интервьюер.
+                    Задавай вопросы по одному. Жди ответа.
+                    Кандидат: ${studentName}.
                 `;
-
             } else {
-                // РЕЖИМ ВАКАНСИЙ
-                const vacanciesRes = await db.query('SELECT title, description FROM vacancies ORDER BY created_at DESC LIMIT 10');
+                const vacanciesRes = await db.query('SELECT title FROM vacancies ORDER BY created_at DESC LIMIT 5');
                 const vacs = vacanciesRes.rows.map(v => `- ${v.title}`).join('\n');
-                systemPrompt = `Ты — карьерный консультант. Помогай искать работу. Вот свежие вакансии:\n${vacs}\n.`;
+                systemPrompt = `Ты карьерный консультант. Вакансии:\n${vacs}`;
             }
 
-            // История переписки
             const historyRes = await db.query('SELECT role, content FROM chat_messages WHERE user_id = $1 ORDER BY created_at DESC LIMIT 10', [userId]);
             const recentHistory = historyRes.rows.reverse();
 
@@ -172,7 +115,6 @@ class ChatController {
             ];
 
             const aiAnswer = await aiService.getCompletion(messagesForAi);
-
             const savedAiMsg = await db.query(
                 'INSERT INTO chat_messages (user_id, role, content) VALUES ($1, $2, $3) RETURNING *',
                 [userId, 'assistant', aiAnswer]
@@ -185,158 +127,216 @@ class ChatController {
         }
     }
 
-    // Очистка
     clearHistory = async (req, res) => {
-        try {
-            await db.query('DELETE FROM chat_messages WHERE user_id = $1', [req.user.id]);
-            res.json({ message: 'History cleared' });
-        } catch (e) { res.status(500).json({ message: 'Error' }); }
+        try { await db.query('DELETE FROM chat_messages WHERE user_id = $1', [req.user.id]); res.json({ message: 'Cleared' }); }
+        catch (e) { res.status(500).json({ message: 'Error' }); }
     }
 
+    // 🔥🔥🔥 ОБНОВЛЕННЫЙ МЕТОД ГЕНЕРАЦИИ ROADMAP 🔥🔥🔥
     generateRoadmap = async (req, res) => {
         try {
             const { role } = req.body;
             if (!role) return res.status(400).json({ message: "Укажите роль" });
 
-            // Промпт для более масштабного графа
+            console.log(`🤖 Generating Smart Roadmap for: ${role}...`);
+
             const prompt = `
-                Ты — Senior Ментор. Составь МАСШТАБНУЮ карту развития (Roadmap) для: "${role}".
+                Ты — Senior Technical Mentor.
+                Составь подробную карту развития (Roadmap) для профессии: "${role}".
                 
-                Требования:
-                1. Создай 7-9 КЛЮЧЕВЫХ этапов (Main Nodes).
-                2. Для каждого этапа дай 3-4 подтемы (Subtopics).
-                3. Названия должны быть КОРОТКИМИ (макс 3-5 слов), чтобы влезали в блоки.
+                СТРУКТУРА:
+                1. Создай 5-7 КЛЮЧЕВЫХ этапов (Main Nodes).
+                2. Для каждого этапа 2-3 подтемы (Subtopics).
                 
-                ВЕРНИ ТОЛЬКО JSON МАССИВ.
-                Format:
+                ОБЯЗАТЕЛЬНО верни данные в формате JSON (массив объектов).
+                Каждый объект (и тема, и подтема) должен содержать:
+                - "label": "Название темы"
+                - "desc": "Краткое описание"
+                - "difficulty": "easy", "medium" или "hard" (оцени сложность для новичка)
+                - "time": "2h", "5h", "1 day" (примерное время на изучение)
+                - "xpEarned": число от 50 до 300 (очки опыта за прохождение)
+                - "resources": массив из 2 полезных ссылок (реальных или сгенерированных ТОЛЬКО ТЕКСТОВЫЕ СТАТЬИ БЕЗ ВИДЕО):
+                    [ { "title": "...", "type": "video" или "article", "link": "..." } ]
+                
+                ТРЕБОВАНИЯ:
+                - Язык: РУССКИЙ.
+                - Технические термины на английском.
+                - Верни ТОЛЬКО валидный JSON.
+
+                Пример структуры:
                 [
                     { 
-                        "id": "1", 
-                        "label": "Название этапа", 
-                        "desc": "Чему научишься...", 
-                        "subtopics": ["Подтема 1", "Подтема 2", "Подтема 3"] 
+                        "label": "Основы", 
+                        "desc": "...", 
+                        "difficulty": "easy",
+                        "time": "5h",
+                        "xpEarned": 100,
+                        "resources": [],
+                        "subtopics": [ ... ] 
                     }
                 ]
             `;
 
             const aiResponse = await aiService.getCompletion([{ role: 'user', content: prompt }]);
-            const cleanJson = aiResponse.replace(/```json/g, '').replace(/```/g, '').trim();
+
+            // Чистка JSON
+            let cleanJson = aiResponse.replace(/```json/g, '').replace(/```/g, '').trim();
+            // Исправление обрыва строки (иногда ИИ обрывает JSON)
+            if (!cleanJson.endsWith(']') && !cleanJson.endsWith('}')) {
+               // Пытаемся закрыть, если обрезалось (примитивно)
+               cleanJson += ']';
+            }
 
             let steps = [];
             try {
-                const match = cleanJson.match(/\[[\s\S]*\]/);
-                steps = JSON.parse(match ? match[0] : cleanJson);
-            } catch (e) {
-                return res.status(500).json({ message: "Ошибка AI. Попробуйте снова." });
+                // Попытка 1: Просто парсим
+                steps = JSON.parse(cleanJson);
+            } catch (parseError) {
+                // Попытка 2: Ищем массив внутри текста
+                const firstBracket = aiResponse.indexOf('[');
+                const lastBracket = aiResponse.lastIndexOf(']');
+                if (firstBracket !== -1 && lastBracket !== -1) {
+                    try {
+                        steps = JSON.parse(aiResponse.substring(firstBracket, lastBracket + 1));
+                    } catch (e2) {
+                        console.error("JSON Parsing failed completely");
+                        return res.status(500).json({ message: "Ошибка обработки ответа ИИ" });
+                    }
+                } else {
+                    return res.status(500).json({ message: "ИИ вернул неверный формат" });
+                }
             }
+
+            // Доп. валидация структуры (на всякий случай проставляем дефолты)
+            const validateNode = (node) => {
+                if (!node.difficulty) node.difficulty = 'medium';
+                if (!node.time) node.time = '2h';
+                if (!node.xpEarned) node.xpEarned = 100;
+                if (!node.resources) node.resources = [];
+                if (node.subtopics) node.subtopics.forEach(validateNode);
+            };
+            steps.forEach(validateNode);
 
             res.json(steps);
 
         } catch (e) {
             console.error("Roadmap Error:", e);
-            res.status(500).json({ message: "Ошибка генерации" });
+            res.status(500).json({ message: "Ошибка генерации roadmap" });
         }
     }
 
-    // --- НОВЫЙ МЕТОД: СОХРАНЕНИЕ ПРОГРЕССА ---
+    // --- QUIZ (ЗАДАЧА) ---
+    generateNodeQuiz = async (req, res) => {
+        try {
+            const { topic, description } = req.body;
+            const prompt = `
+                Ты — Интервьюер. Тема: "${topic}" (${description}).
+                Придумай 1 практическую задачу.
+                Верни JSON: { "question": "...", "hint": "..." }
+            `;
+            const aiResponse = await aiService.getCompletion([{ role: 'user', content: prompt }]);
+            const clean = aiResponse.replace(/```json/g, '').replace(/```/g, '').trim();
+            const json = JSON.parse(clean.match(/\{[\s\S]*\}/)[0]);
+            res.json(json);
+        } catch (e) {
+            res.status(500).json({ message: "Ошибка создания теста" });
+        }
+    }
+
+    // --- ПРОВЕРКА ОТВЕТА ---
+    checkNodeQuiz = async (req, res) => {
+        try {
+            const { topic, question, answer } = req.body;
+            const prompt = `
+                Тема: ${topic}. Вопрос: ${question}. Ответ: "${answer}".
+                Оцени ответ.
+                Верни JSON: { "passed": true/false, "feedback": "Markdown текст...", "score": 85 }
+            `;
+            const aiResponse = await aiService.getCompletion([{ role: 'user', content: prompt }]);
+            const clean = aiResponse.replace(/```json/g, '').replace(/```/g, '').trim();
+            const json = JSON.parse(clean.match(/\{[\s\S]*\}/)[0]);
+            res.json(json);
+        } catch (e) {
+            res.status(500).json({ message: "Ошибка проверки" });
+        }
+    }
+
+    // --- СОХРАНЕНИЕ ---
     saveRoadmap = async (req, res) => {
         try {
             const userId = req.user.id;
-            const { roadmapData, role } = req.body; // Принимаем nodes и role
-
+            const { roadmapData, role } = req.body;
             if (!roadmapData) return res.status(400).json({message: "Нет данных"});
 
-            // Формируем объект для сохранения: { role: "DevOps", nodes: [...] }
-            const dataToSave = {
-                role: role || "My Roadmap",
-                nodes: roadmapData
-            };
-
-            await db.query(
-                'UPDATE graduates SET roadmap_data = $1 WHERE user_id = $2',
-                [JSON.stringify(dataToSave), userId]
-            );
-
-            res.json({ message: "Прогресс сохранен" });
+            const dataToSave = { role: role || "My Roadmap", nodes: roadmapData };
+            await db.query('UPDATE graduates SET roadmap_data = $1 WHERE user_id = $2', [JSON.stringify(dataToSave), userId]);
+            res.json({ message: "Saved" });
         } catch (e) {
-            console.error("Save Roadmap Error:", e);
-            res.status(500).json({ message: "Ошибка сохранения" });
+            res.status(500).json({ message: "Error saving" });
         }
     }
 
+    // 1. ПОЛУЧЕНИЕ (С МИГРАЦИЕЙ)
     getRoadmap = async (req, res) => {
         try {
             const userId = req.user.id;
             const result = await db.query('SELECT roadmap_data FROM graduates WHERE user_id = $1', [userId]);
 
-            if (result.rows.length > 0 && result.rows[0].roadmap_data) {
-                res.json(result.rows[0].roadmap_data);
-            } else {
-                res.json([]); // Пустой массив, если карты нет
+            let data = result.rows[0]?.roadmap_data;
+
+            // Миграция: Если там старый формат (просто массив), оборачиваем в список
+            if (data && Array.isArray(data)) {
+                data = {
+                    activeId: 'default',
+                    list: [{ id: 'default', role: 'My Roadmap', nodes: data }]
+                };
+                await db.query('UPDATE graduates SET roadmap_data = $1 WHERE user_id = $2', [JSON.stringify(data), userId]);
             }
+
+            if (!data) data = { activeId: null, list: [] };
+            res.json(data);
         } catch (e) {
-            console.error("Get Roadmap Error:", e);
-            res.status(500).json({ message: "Ошибка загрузки карты" });
+            res.status(500).json({ message: "Error loading" });
         }
     }
 
     archiveRoadmap = async (req, res) => {
         try {
             const userId = req.user.id;
-
-            // 1. Получаем текущий из БД
             const gradRes = await db.query('SELECT roadmap_data FROM graduates WHERE user_id = $1', [userId]);
-            const currentData = gradRes.rows[0]?.roadmap_data; // Это объект { role, nodes }
+            const currentData = gradRes.rows[0]?.roadmap_data;
 
-            if (!currentData) {
-                return res.status(400).json({ message: "Нет активного роадмапа" });
-            }
+            if (!currentData) return res.status(400).json({ message: "Нет роадмапа" });
 
-            // 2. Достаем название роли.
-            // Приоритет: 1. Сохраненное в JSON, 2. Присланное с фронта, 3. Дефолт
             let roleTitle = "IT Roadmap";
             let nodes = [];
-
-            // Проверяем формат (старый массив или новый объект)
             if (Array.isArray(currentData)) {
                 nodes = currentData;
-                roleTitle = req.body.roleTitle || "My Roadmap"; // Для старых данных берем с фронта
+                roleTitle = req.body.roleTitle || "My Roadmap";
             } else if (currentData.nodes) {
                 nodes = currentData.nodes;
-                roleTitle = currentData.role || req.body.roleTitle || "My Roadmap";
+                roleTitle = currentData.role || req.body.roleTitle;
             }
 
             const { finalProgress } = req.body;
-
-            // 3. В историю сохраняем только узлы, чтобы не дублировать вложенность
             await db.query(
                 'INSERT INTO roadmap_history (user_id, role_title, progress, roadmap_data) VALUES ($1, $2, $3, $4)',
                 [userId, roleTitle, finalProgress || 0, JSON.stringify(nodes)]
             );
-
-            // 4. Очищаем
             await db.query('UPDATE graduates SET roadmap_data = NULL WHERE user_id = $1', [userId]);
-
-            res.json({ message: "Роадмап перемещен в архив" });
-
+            res.json({ message: "Archived" });
         } catch (e) {
-            console.error("Archive Error:", e);
-            res.status(500).json({ message: "Ошибка архивации" });
+            res.status(500).json({ message: "Error archiving" });
         }
     }
 
-    // --- ПОЛУЧЕНИЕ ИСТОРИИ РОАДМАПОВ ---
     getRoadmapHistory = async (req, res) => {
         try {
             const userId = req.user.id;
-            const result = await db.query(
-                'SELECT * FROM roadmap_history WHERE user_id = $1 ORDER BY completed_at DESC',
-                [userId]
-            );
+            const result = await db.query('SELECT * FROM roadmap_history WHERE user_id = $1 ORDER BY completed_at DESC', [userId]);
             res.json(result.rows);
         } catch (e) {
-            console.error("Get Roadmap History Error:", e);
-            res.status(500).json({ message: "Ошибка получения истории" });
+            res.status(500).json({ message: "Error history" });
         }
     }
 }
