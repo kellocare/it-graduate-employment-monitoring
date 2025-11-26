@@ -14,7 +14,6 @@
       <!-- ВЕРСИЯ ДЛЯ АДМИНА                         -->
       <!-- ========================================= -->
       <template v-if="isAdmin">
-        <!-- (Код админа из твоего файла, я его не трогаю, но добавляю @click для новостей) -->
         <div class="welcome-banner admin-banner fade-in-up">
           <div class="banner-content">
             <div class="greeting-badge admin-badge"><security-scan-filled /> Admin Mode</div>
@@ -40,6 +39,7 @@
                  <div class="glass-card action-card fade-in-up" style="animation-delay: 0.5s" @click="$router.push('/admin/news')"><div class="icon-box pink-gradient"><read-filled /></div><div class="card-text"><h4>Новости</h4><p>Публикации</p></div></div>
                  <div class="glass-card action-card fade-in-up" style="animation-delay: 0.6s" @click="$router.push('/admin/logs')"><div class="icon-box gray-gradient"><history-outlined /></div><div class="card-text"><h4>Журнал</h4><p>Логи действий</p></div></div>
               </div>
+
               <h3 class="section-title fade-in-up mt-40" style="animation-delay: 0.3s"><hourglass-filled class="title-icon" style="color: #f59e0b;" /> Требуют проверки</h3>
               <div class="glass-card list-card fade-in-up" style="animation-delay: 0.4s">
                  <div v-if="pendingVacanciesList.length === 0" class="empty-mini"><check-circle-two-tone two-tone-color="#52c41a" style="font-size: 24px" /><p>Все проверено!</p></div>
@@ -48,16 +48,8 @@
                     <div class="view-all" @click="$router.push('/admin/vacancies')">Смотреть все ({{ pendingVacanciesList.length }})</div>
                  </div>
               </div>
-              <!-- НОВОСТИ АДМИНА (ИСПРАВЛЕНО) -->
-              <h3 class="section-title fade-in-up mt-40" style="animation-delay: 0.4s"><bell-filled style="color: #f59e0b;" class="title-icon" /> Опубликованные новости</h3>
-              <div class="news-list fade-in-up" style="animation-delay: 0.5s">
-                 <div v-if="newsList.length === 0" class="empty-news">Пока новостей нет</div>
-                 <div v-for="news in newsList" :key="news.id" class="glass-card news-card" @click="openNewsModal(news)">
-                    <div v-if="news.image_url" class="news-img" :style="{ backgroundImage: `url(${news.image_url})` }"></div>
-                    <div class="news-body"><div class="news-meta">{{ new Date(news.created_at).toLocaleDateString() }}</div><h4>{{ news.title }}</h4><p>{{ news.content }}</p></div>
-                 </div>
-              </div>
            </div>
+
            <div class="right-column">
               <div class="glass-card widget-card fade-in-up" style="animation-delay: 0.3s"><div class="widget-header"><hdd-filled style="color: #10b981" /> <span>System Status</span></div><div class="server-status-list"><div class="status-row"><span>API Gateway</span><span class="status-val ok">Online</span></div><div class="status-row"><span>Database</span><span class="status-val ok">Connected</span></div><div class="status-row"><span>AI Service</span><span class="status-val ok">Active</span></div><div class="status-row"><span>Server Load</span><span class="status-val">12%</span></div></div></div>
               <div class="glass-card widget-card fade-in-up" style="animation-delay: 0.4s"><div class="widget-header"><user-add-outlined style="color: #6366f1" /> <span>Новые пользователи</span></div><div class="users-mini-list"><div v-for="u in latestUsers.slice(0, 4)" :key="u.id" class="user-mini-item"><a-avatar size="small" style="background-color: #87d068">{{ u.email[0].toUpperCase() }}</a-avatar><span class="u-email">{{ u.email }}</span><span class="u-role">{{ u.role === 'employer' ? 'HR' : 'Stud' }}</span></div></div><div class="view-all-link" @click="$router.push('/admin/users')">Все пользователи</div></div>
@@ -110,11 +102,10 @@
               </div>
             </div>
 
-            <!-- НОВОСТИ ПЛАТФОРМЫ (СТУДЕНТ) -->
+            <!-- НОВОСТИ ПЛАТФОРМЫ -->
             <h3 class="section-title fade-in-up mt-40" style="animation-delay: 0.4s"><bell-filled style="color: #f59e0b;" class="title-icon" /> Новости платформы</h3>
             <div class="news-list fade-in-up" style="animation-delay: 0.5s">
                <div v-if="newsList.length === 0" class="empty-news">Пока новостей нет</div>
-               <!-- ДОБАВЛЕН @click="openNewsModal(news)" -->
                <div v-for="news in newsList" :key="news.id" class="glass-card news-card" @click="openNewsModal(news)">
                   <div v-if="news.image_url" class="news-img" :style="{ backgroundImage: `url(${news.image_url})` }"></div>
                   <div class="news-body"><div class="news-meta">{{ new Date(news.created_at).toLocaleDateString() }}</div><h4>{{ news.title }}</h4><p>{{ news.content }}</p></div>
@@ -173,12 +164,14 @@ import { useRouter, useRoute } from 'vue-router';
 import { computed, ref, onMounted, watch } from 'vue';
 import api from '../axios';
 import { message } from 'ant-design-vue';
+// 🔥 ИСПРАВЛЕНО: ДОБАВЛЕН RobotOutlined и другие иконки
 import {
   AppstoreFilled, MessageFilled, IdcardFilled, RobotFilled, ArrowRightOutlined, CheckCircleFilled, ThunderboltFilled, BulbFilled,
   BankFilled, RocketFilled, ClockCircleOutlined, CloseCircleOutlined, SmileTwoTone, FireFilled, ReadFilled, MailOutlined,
   LoadingOutlined, FormOutlined, ThunderboltTwoTone, CheckCircleTwoTone, CloseCircleTwoTone, CalendarOutlined,
   TeamOutlined, PlusCircleFilled, UserAddOutlined, SecurityScanFilled, AuditOutlined, LineChartOutlined, HddFilled, UserOutlined,
-  HourglassFilled, FileTextOutlined, RightOutlined, BellFilled, HistoryOutlined
+  HourglassFilled, FileTextOutlined, RightOutlined, BellFilled, HistoryOutlined,
+  RobotOutlined // <--- ДОБАВЛЕНО
 } from '@ant-design/icons-vue';
 
 export default {
@@ -188,7 +181,8 @@ export default {
     BankFilled, RocketFilled, ClockCircleOutlined, CloseCircleOutlined, SmileTwoTone, FireFilled, ReadFilled, MailOutlined,
     LoadingOutlined, FormOutlined, ThunderboltTwoTone, CheckCircleTwoTone, CloseCircleTwoTone, CalendarOutlined,
     TeamOutlined, PlusCircleFilled, UserAddOutlined, SecurityScanFilled, AuditOutlined, LineChartOutlined, HddFilled, UserOutlined,
-    HourglassFilled, FileTextOutlined, RightOutlined, BellFilled, HistoryOutlined
+    HourglassFilled, FileTextOutlined, RightOutlined, BellFilled, HistoryOutlined,
+    RobotOutlined // <--- ДОБАВЛЕНО
   },
   setup(props) {
     const router = useRouter();
@@ -215,7 +209,6 @@ export default {
     const studentAnswers = ref([]);
     const coverLetter = ref('');
 
-    // State для новостей
     const newsModalVisible = ref(false);
     const selectedNews = ref(null);
 
@@ -236,7 +229,6 @@ export default {
             const msgRes = await api.get('/messages/unread');
             msgCount.value = msgRes.data.count;
 
-            // Грузим новости и проверяем URL
             try {
                 const newsRes = await api.get('/news');
                 newsList.value = newsRes.data;
@@ -265,7 +257,6 @@ export default {
         } catch (e) {}
     };
 
-    // ЛОГИКА ОТКРЫТИЯ НОВОСТИ
     const openNewsModal = (news) => {
         selectedNews.value = news;
         newsModalVisible.value = true;
@@ -282,7 +273,6 @@ export default {
         }
     };
 
-    // Если URL поменялся (например, кликнули в навбаре)
     watch(() => route.query.news_id, (newId) => {
         if (newId && newsList.value.length > 0) checkNewsParam();
     });

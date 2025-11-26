@@ -141,9 +141,9 @@ class MessagesController {
                 'SELECT COUNT(*) FROM direct_messages WHERE receiver_id = $1 AND is_read = FALSE',
                 [req.user.id]
             );
-            res.json({ count: parseInt(result.rows[0].count) });
+            res.json({count: parseInt(result.rows[0].count)});
         } catch (e) {
-            res.status(500).json({ count: 0 });
+            res.status(500).json({count: 0});
         }
     }
 }

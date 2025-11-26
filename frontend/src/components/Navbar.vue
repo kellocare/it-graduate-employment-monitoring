@@ -6,7 +6,7 @@
     @mouseleave="isHovered = false"
   >
 
-    <!-- ЛОГОТИП + КНОПКА ЗАКРЕПА -->
+    <!-- ЛОГОТИП (Виден всем) -->
     <div class="logo-wrapper">
       <div class="logo-box"><rocket-filled /></div>
 
@@ -14,10 +14,10 @@
         <span v-if="isExpanded" class="logo-text">IT Monitor</span>
       </transition>
 
-      <!-- 🔥 КНОПКА ЗАКРЕПИТЬ (Появляется только когда меню открыто) -->
+      <!-- 🔥 КНОПКА ЗАКРЕПА (Только для авторизованных) -->
       <transition name="fade">
         <div
-          v-if="isExpanded"
+          v-if="isExpanded && user"
           class="pin-btn"
           :class="{ 'active': isPinned }"
           @click.stop="togglePin"
@@ -29,73 +29,91 @@
       </transition>
     </div>
 
-    <!-- ОСНОВНОЕ МЕНЮ -->
-    <div class="menu-items">
-      <router-link
-        v-for="item in menuItems"
-        :key="item.path"
-        :to="item.path"
-        class="nav-item"
-        active-class="active"
-      >
-        <component :is="item.icon" class="nav-icon" />
-        <transition name="fade">
-          <span v-if="isExpanded" class="nav-text">{{ item.name }}</span>
-        </transition>
-      </router-link>
-    </div>
-
-    <!-- НИЖНЯЯ СЕКЦИЯ -->
-    <div class="bottom-section">
-
-      <!-- СООБЩЕНИЯ -->
-      <div class="nav-item action-btn" @click="$router.push('/messages')" title="Сообщения">
-        <div class="icon-container">
-           <message-outlined class="nav-icon" />
-           <div v-if="msgCount > 0" class="badge-dot">{{ msgCount > 9 ? '9+' : msgCount }}</div>
-        </div>
-        <transition name="fade"><span v-if="isExpanded" class="nav-text">Сообщения</span></transition>
+    <!-- ========================================= -->
+    <!-- 1. ЕСЛИ ПОЛЬЗОВАТЕЛЬ АВТОРИЗОВАН          -->
+    <!-- ========================================= -->
+    <template v-if="user">
+      <!-- ОСНОВНОЕ МЕНЮ -->
+      <div class="menu-items">
+        <router-link
+          v-for="item in menuItems"
+          :key="item.path"
+          :to="item.path"
+          class="nav-item"
+          active-class="active"
+        >
+          <component :is="item.icon" class="nav-icon" />
+          <transition name="fade">
+            <span v-if="isExpanded" class="nav-text">{{ item.name }}</span>
+          </transition>
+        </router-link>
       </div>
 
-      <!-- УВЕДОМЛЕНИЯ -->
-      <a-popover
-        placement="rightBottom"
-        trigger="click"
-        overlayClassName="cyber-popover"
-        :arrowPointAtCenter="true"
-      >
-        <template #content>
-            <div class="notif-list custom-scroll">
-              <div v-if="notifications.length === 0" class="empty-notif">Нет новых уведомлений</div>
-              <div v-for="item in notifications" :key="item.id" class="notif-item" :class="{ 'unread': !item.is_read }">
-                <div class="notif-header" @click="markRead(item)">
-                   <div class="notif-title">{{ item.title }}</div>
-                   <div class="notif-date">{{ new Date(item.created_at).toLocaleDateString() }}</div>
-                </div>
-                <div class="notif-msg" @click="markRead(item)">{{ item.message }}</div>
-                <div v-if="item.type === 'invite' && !item.is_read" class="invite-actions">
-                  <button class="btn-accept" @click="respond(item, 'accepted')">Принять</button>
-                  <button class="btn-decline" @click="respond(item, 'declined')">Отклонить</button>
+      <!-- НИЖНЯЯ СЕКЦИЯ (Сообщения, Уведомления, Выход) -->
+      <div class="bottom-section">
+        <!-- СООБЩЕНИЯ -->
+        <div class="nav-item action-btn" @click="$router.push('/messages')" title="Сообщения">
+          <div class="icon-container">
+             <message-outlined class="nav-icon" />
+             <div v-if="msgCount > 0" class="badge-dot">{{ msgCount > 9 ? '9+' : msgCount }}</div>
+          </div>
+          <transition name="fade"><span v-if="isExpanded" class="nav-text">Сообщения</span></transition>
+        </div>
+
+        <!-- УВЕДОМЛЕНИЯ -->
+        <a-popover
+          placement="rightBottom"
+          trigger="click"
+          overlayClassName="cyber-popover"
+          :arrowPointAtCenter="true"
+        >
+          <template #content>
+              <div class="notif-list custom-scroll">
+                <div v-if="notifications.length === 0" class="empty-notif">Нет новых уведомлений</div>
+                <div v-for="item in notifications" :key="item.id" class="notif-item" :class="{ 'unread': !item.is_read }">
+                  <div class="notif-header" @click="markRead(item)">
+                     <div class="notif-title">{{ item.title }}</div>
+                     <div class="notif-date">{{ new Date(item.created_at).toLocaleDateString() }}</div>
+                  </div>
+                  <div class="notif-msg" @click="markRead(item)">{{ item.message }}</div>
+                  <div v-if="item.type === 'invite' && !item.is_read" class="invite-actions">
+                    <button class="btn-accept" @click="respond(item, 'accepted')">Принять</button>
+                    <button class="btn-decline" @click="respond(item, 'declined')">Отклонить</button>
+                  </div>
                 </div>
               </div>
+          </template>
+
+          <div class="nav-item action-btn" title="Уведомления">
+            <div class="icon-container">
+               <bell-outlined class="nav-icon" />
+               <div v-if="unreadCount > 0" class="badge-dot">{{ unreadCount > 9 ? '9+' : unreadCount }}</div>
             </div>
-        </template>
-
-        <div class="nav-item action-btn" title="Уведомления">
-          <div class="icon-container">
-             <bell-outlined class="nav-icon" />
-             <div v-if="unreadCount > 0" class="badge-dot">{{ unreadCount > 9 ? '9+' : unreadCount }}</div>
+            <transition name="fade"><span v-if="isExpanded" class="nav-text">Уведомления</span></transition>
           </div>
-          <transition name="fade"><span v-if="isExpanded" class="nav-text">Уведомления</span></transition>
-        </div>
-      </a-popover>
+        </a-popover>
 
-      <!-- ВЫХОД -->
-      <div class="nav-item logout-btn" @click="logout">
-        <logout-outlined class="nav-icon" />
-        <transition name="fade"><span v-if="isExpanded" class="nav-text">Выход</span></transition>
+        <!-- ВЫХОД -->
+        <div class="nav-item logout-btn" @click="logout">
+          <logout-outlined class="nav-icon" />
+          <transition name="fade"><span v-if="isExpanded" class="nav-text">Выход</span></transition>
+        </div>
       </div>
-    </div>
+    </template>
+
+    <!-- ========================================= -->
+    <!-- 2. ЕСЛИ ГОСТЬ (НЕ АВТОРИЗОВАН)            -->
+    <!-- ========================================= -->
+    <template v-else>
+      <div class="menu-items">
+        <router-link to="/login" class="nav-item" active-class="active">
+          <login-outlined class="nav-icon" />
+          <transition name="fade">
+            <span v-if="isExpanded" class="nav-text">Войти</span>
+          </transition>
+        </router-link>
+      </div>
+    </template>
 
   </nav>
 </template>
@@ -109,7 +127,8 @@ import {
   RocketFilled, HomeOutlined, SolutionOutlined, CompassOutlined,
   RobotOutlined, UserOutlined, LogoutOutlined, MessageOutlined, BellOutlined,
   TeamOutlined, SafetyCertificateOutlined,
-  PushpinOutlined, PushpinFilled // 🔥 Новые иконки
+  PushpinOutlined, PushpinFilled,
+  LoginOutlined // 🔥 Добавлена иконка входа
 } from '@ant-design/icons-vue';
 
 export default {
@@ -117,30 +136,33 @@ export default {
   components: {
     RocketFilled, HomeOutlined, SolutionOutlined, CompassOutlined,
     RobotOutlined, UserOutlined, LogoutOutlined, MessageOutlined, BellOutlined,
-    TeamOutlined, SafetyCertificateOutlined, PushpinOutlined, PushpinFilled
+    TeamOutlined, SafetyCertificateOutlined, PushpinOutlined, PushpinFilled,
+    LoginOutlined // 🔥
   },
   setup() {
     const isHovered = ref(false);
-
-    // Загружаем состояние из localStorage (по умолчанию false)
     const isPinned = ref(localStorage.getItem('navbarPinned') === 'true');
-
     const router = useRouter();
     const notifications = ref([]);
     const msgCount = ref(0);
     const user = ref(null);
 
-    // Главное вычисляемое свойство: Открыто, если навели мышь ИЛИ закреплено
-    const isExpanded = computed(() => isHovered.value || isPinned.value);
+    // Если пользователя нет, isExpanded зависит только от наведения (закреп не работает для гостя)
+    const isExpanded = computed(() => {
+      if (!user.value) return isHovered.value;
+      return isHovered.value || isPinned.value;
+    });
 
-    // Функция переключения закрепа
     const togglePin = () => {
-        isPinned.value = !isPinned.value;
+      if (!user.value) return; // Гость не может закреплять
+      isPinned.value = !isPinned.value;
       localStorage.setItem('navbarPinned', isPinned.value);
     };
 
     const menuItems = computed(() => {
-      const role = user.value?.role;
+      if (!user.value) return []; // Пустой список для гостя
+
+      const role = user.value.role;
       const items = [{path: '/', name: 'Главная', icon: 'HomeOutlined'}];
 
       if (role === 'graduate') {
@@ -152,7 +174,7 @@ export default {
       } else if (role === 'employer') {
         items.push(
             {path: '/vacancies', name: 'Вакансии', icon: 'SolutionOutlined'},
-            {path: '/employer', name: 'Кандидаты', icon: 'TeamOutlined'}
+            {path: '/employer', name: 'Моя компания', icon: 'TeamOutlined'}
         );
       } else if (role === 'admin') {
         items.push(
@@ -168,12 +190,17 @@ export default {
     const logout = () => {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
+      // Обнуляем user, чтобы реактивно перерисовался Navbar
+      user.value = null;
       router.push('/login');
     };
 
     const loadData = async () => {
       const u = localStorage.getItem('user');
-      if (!u) return;
+      if (!u) {
+        user.value = null;
+        return;
+      }
       user.value = JSON.parse(u);
 
       try {
@@ -193,8 +220,7 @@ export default {
       try {
         await api.post('/notifications/read', {id: item.id});
         item.is_read = true;
-      } catch (e) {
-      }
+      } catch (e) {}
     };
 
     const respond = async (item, status) => {
@@ -214,7 +240,7 @@ export default {
     });
 
     return {
-      isHovered, isPinned, isExpanded, togglePin, // 🔥 Возвращаем новые переменные
+      isHovered, isPinned, isExpanded, togglePin,
       logout, notifications, msgCount, unreadCount, markRead, respond, menuItems, user
     };
   }
@@ -268,7 +294,6 @@ export default {
   display: flex;
   align-items: center;
   margin-bottom: 30px;
-  /* Теперь используем relative, чтобы позиционировать скрепку */
   position: relative;
   justify-content: center;
   width: 100%;

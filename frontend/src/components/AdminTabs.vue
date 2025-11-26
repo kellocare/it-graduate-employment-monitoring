@@ -3,20 +3,16 @@
     <div class="glass-nav">
 
       <!-- 1. Дашборд -->
-      <!-- Путь: /admin (так как в роутере path: '') -->
-      <!-- exact: чтобы он не горел активным на других страницах -->
       <router-link to="/admin" class="nav-item" active-class="active-link" exact-active-class="active-link">
         <dashboard-outlined /> <span>Дашборд</span>
       </router-link>
 
       <!-- 2. Пользователи -->
-      <!-- Путь: /admin/users -->
       <router-link to="/admin/users" class="nav-item" active-class="active-link">
         <team-outlined /> <span>Пользователи</span>
       </router-link>
 
-      <!-- 3. Вакансии -->
-      <!-- Путь: /admin/vacancies -->
+      <!-- 3. Вакансии (Модерация) -->
       <router-link to="/admin/vacancies" class="nav-item" active-class="active-link">
         <div class="badge-wrapper">
           <safety-certificate-filled />
@@ -25,16 +21,22 @@
         <span>Модерация</span>
       </router-link>
 
-      <!-- 4. НОВОСТИ -->
+      <!-- 4. Новости -->
       <router-link to="/admin/news" class="nav-item" active-class="active-link">
         <read-outlined /> <span>Новости</span>
       </router-link>
 
-      <!-- 5. ЛОГИ -->
+      <!-- 5. 🔥 НОВАЯ ВКЛАДКА: База данных (Реестр) -->
+      <router-link to="/admin/data" class="nav-item" active-class="active-link">
+        <database-outlined /> <span>БД</span>
+      </router-link>
+
+      <!-- 6. Логи -->
       <router-link to="/admin/logs" class="nav-item" active-class="active-link">
         <history-outlined /> <span>Логи</span>
       </router-link>
 
+      <!-- 7. Отзывы -->
       <router-link to="/admin/reviews" class="nav-item" active-class="active-link">
           <message-filled /> <span>Отзывы</span>
       </router-link>
@@ -46,19 +48,39 @@
 <script>
 import { ref, onMounted } from 'vue';
 import api from '../axios';
-import { DashboardOutlined, TeamOutlined, SafetyCertificateFilled, ReadOutlined, HistoryOutlined} from '@ant-design/icons-vue';
+// 🔥 Импортируем недостающие иконки: MessageFilled и DatabaseOutlined
+import {
+  DashboardOutlined,
+  TeamOutlined,
+  SafetyCertificateFilled,
+  ReadOutlined,
+  HistoryOutlined,
+  MessageFilled,
+  DatabaseOutlined
+} from '@ant-design/icons-vue';
 
 export default {
-  components: { DashboardOutlined, TeamOutlined, SafetyCertificateFilled, ReadOutlined, HistoryOutlined },
+  components: {
+    DashboardOutlined,
+    TeamOutlined,
+    SafetyCertificateFilled,
+    ReadOutlined,
+    HistoryOutlined,
+    MessageFilled,    // Добавили
+    DatabaseOutlined  // Добавили
+  },
   setup() {
     const pendingCount = ref(0);
+
     const checkPending = async () => {
       try {
         const res = await api.get('/vacancies/admin/all');
         pendingCount.value = res.data.filter(v => v.status === 'pending').length;
       } catch (e) {}
     };
+
     onMounted(checkPending);
+
     return { pendingCount };
   }
 }
@@ -83,6 +105,8 @@ export default {
   box-shadow: 0 10px 30px rgba(0,0,0,0.1);
   gap: 5px;
   border: 1px solid rgba(255, 255, 255, 0.6);
+  flex-wrap: wrap; /* На случай маленьких экранов */
+  justify-content: center;
 }
 
 .nav-item {
@@ -97,6 +121,7 @@ export default {
   transition: all 0.3s ease;
   font-size: 0.95rem;
   border: 1px solid transparent;
+  white-space: nowrap;
 }
 
 .nav-item:hover {

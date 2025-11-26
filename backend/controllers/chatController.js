@@ -8,9 +8,12 @@ class ChatController {
     getHistory = async (req, res) => {
         try {
             const userId = req.user.id;
+            // Получаем режим из query-параметров (?mode=interview), по дефолту 'vacancy'
+            const mode = req.query.mode || 'vacancy';
+
             const history = await db.query(
-                'SELECT role, content, created_at FROM chat_messages WHERE user_id = $1 ORDER BY created_at ASC LIMIT 50',
-                [userId]
+                'SELECT role, content, created_at FROM chat_messages WHERE user_id = $1 AND mode = $2 ORDER BY created_at ASC LIMIT 50',
+                [userId, mode]
             );
             res.json(history.rows);
         } catch (e) {
@@ -86,27 +89,48 @@ class ChatController {
             const { message, mode } = req.body;
             const currentMode = mode || 'vacancy';
 
-            await db.query('INSERT INTO chat_messages (user_id, role, content) VALUES ($1, $2, $3)', [userId, 'user', message]);
+            // 🔥 ВАЖНО: Добавляем currentMode в INSERT
+            await db.query(
+                'INSERT INTO chat_messages (user_id, role, content, mode) VALUES ($1, $2, $3, $4)',
+                [userId, 'user', message, currentMode]
+            );
 
             const gradRes = await db.query(`SELECT g.first_name FROM graduates g WHERE g.user_id = $1`, [userId]);
             const studentName = gradRes.rows[0]?.first_name || 'Кандидат';
 
             let systemPrompt = "";
-            if (currentMode === 'resume') {
-                systemPrompt = `Ты — эксперт по резюме. Студент: ${studentName}. Будь краток.`;
-            } else if (currentMode === 'interview') {
+
+            // --- ЛОГИКА ПРОМПТОВ ---
+            if (currentMode === 'interview') {
                 systemPrompt = `
-                    Ты — Технический Интервьюер.
-                    Задавай вопросы по одному. Жди ответа.
-                    Кандидат: ${studentName}.
+                    Ты — Технический Лид (Tech Lead), проводящий собеседование.
+                    Твоя задача: Проверить практические навыки кандидата (${studentName}).
+                    
+                    ИНСТРУКЦИЯ:
+                    1. Задай по очереди несколько вопросов по теме собеседования с вариантами ответов (А, Б, В).
+                    2. Затем дай кандидату **НЕСКОЛЬКО ПРАКТИЧЕСКИХ ЗАДАЧ** по его теме.
+                       Примеры задач:
+                       - "Напиши функцию, которая..."
+                       - "Вот кусок кода, найди в нем ошибку..."
+                       - "Как бы ты спроектировал базу данных для..."
+                    3. Задача должна быть короткой (решаемой за 2-3 минуты).
+                    4. Жди ответов на тест и задачи. 
+                    5. После получения ответов и конца собеседования дай короткий фидбек (Правильно/Нет) и, если нужно, задай уточняющий вопрос.
+                    
+                    Общайся дружелюбно, но профессионально. Используй Markdown для кода.
                 `;
             } else {
+                // Режим 'vacancy' (Поиск)
                 const vacanciesRes = await db.query('SELECT title FROM vacancies ORDER BY created_at DESC LIMIT 5');
                 const vacs = vacanciesRes.rows.map(v => `- ${v.title}`).join('\n');
                 systemPrompt = `Ты карьерный консультант. Вакансии:\n${vacs}`;
             }
 
-            const historyRes = await db.query('SELECT role, content FROM chat_messages WHERE user_id = $1 ORDER BY created_at DESC LIMIT 10', [userId]);
+            // Получаем историю ТОЛЬКО ЭТОГО РЕЖИМА для контекста ИИ
+            const historyRes = await db.query(
+                'SELECT role, content FROM chat_messages WHERE user_id = $1 AND mode = $2 ORDER BY created_at DESC LIMIT 10',
+                [userId, currentMode]
+            );
             const recentHistory = historyRes.rows.reverse();
 
             const messagesForAi = [
@@ -115,9 +139,11 @@ class ChatController {
             ];
 
             const aiAnswer = await aiService.getCompletion(messagesForAi);
+
+            // Сохраняем ответ ИИ тоже с указанием режима
             const savedAiMsg = await db.query(
-                'INSERT INTO chat_messages (user_id, role, content) VALUES ($1, $2, $3) RETURNING *',
-                [userId, 'assistant', aiAnswer]
+                'INSERT INTO chat_messages (user_id, role, content, mode) VALUES ($1, $2, $3, $4) RETURNING *',
+                [userId, 'assistant', aiAnswer, currentMode]
             );
             res.json(savedAiMsg.rows[0]);
 
@@ -128,8 +154,11 @@ class ChatController {
     }
 
     clearHistory = async (req, res) => {
-        try { await db.query('DELETE FROM chat_messages WHERE user_id = $1', [req.user.id]); res.json({ message: 'Cleared' }); }
-        catch (e) { res.status(500).json({ message: 'Error' }); }
+        try {
+            const mode = req.query.mode || 'vacancy';
+            await db.query('DELETE FROM chat_messages WHERE user_id = $1 AND mode = $2', [req.user.id, mode]);
+            res.json({ message: 'History cleared for ' + mode });
+        } catch (e) { res.status(500).json({ message: 'Error' }); }
     }
 
     // 🔥🔥🔥 ОБНОВЛЕННЫЙ МЕТОД ГЕНЕРАЦИИ ROADMAP 🔥🔥🔥

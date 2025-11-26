@@ -17,6 +17,8 @@ import AdminLogs from './views/admin/AdminLogs.vue';
 import TopCompanies from './views/TopCompanies.vue';
 import AdminReviews from './views/admin/AdminReviews.vue';
 import Roadmap from './views/Roadmap.vue';
+import AdminTables from './views/admin/AdminDataManager.vue';
+import PublicProfile from './views/PublicProfile.vue';
 
 
 const routes = [
@@ -37,6 +39,12 @@ const routes = [
     meta: { requiresAuth: true }
     },
     {
+    path: '/profile/:id',
+    name: 'PublicProfile',
+    component: PublicProfile,
+    props: true
+    },
+    {
     path: '/admin',
     component: AdminLayout,
     meta: { requiresAuth: true, role: 'admin' },
@@ -46,7 +54,8 @@ const routes = [
       { path: 'users', component: AdminUsers },
       { path: 'news', component: AdminNews }, // <--- Новое
       { path: 'logs', component: AdminLogs },  // <--- Новое
-      { path: 'reviews', component: AdminReviews }
+      { path: 'reviews', component: AdminReviews },
+      { path: 'data', component: AdminTables }
     ]
   }
 ];

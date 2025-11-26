@@ -8,21 +8,40 @@
       <a-spin :spinning="loading">
 
         <!-- 1. ВЕРХНЯЯ КАРТОЧКА -->
-        <div class="glass-card main-card fade-in">
+        <div class="glass-card main-card fade-in" :class="{ 'admin-theme': isAdmin }">
           <div class="bg-decoration-circle"></div>
+
           <div class="top-actions">
             <button v-if="!isEditing" class="btn-glass-edit" @click="enableEdit"><edit-outlined /> Редактировать</button>
           </div>
+
           <div class="avatar-column">
             <div class="avatar-stack">
-              <a-progress v-if="!isEmployer" type="circle" :percent="completionRate" :width="170" :stroke-color="{ '0%': '#108ee9', '100%': '#87d068' }" :stroke-width="6" class="progress-ring" :show-info="false" />
-              <div class="avatar-img-box"><a-avatar :size="135" :src="getAvatarUrl(profile.avatar_url)" class="main-avatar"><template #icon><user-outlined class="default-icon" /></template></a-avatar></div>
-              <a-upload v-if="isEditing" name="avatar" :show-upload-list="false" :customRequest="handleUpload" class="avatar-upload-pos"><button class="btn-mini-edit" title="Загрузить фото"><camera-outlined /></button></a-upload>
+              <!-- Студент: Прогресс -->
+              <a-progress v-if="isStudent" type="circle" :percent="completionRate" :width="170" :stroke-color="{ '0%': '#108ee9', '100%': '#87d068' }" :stroke-width="6" class="progress-ring" :show-info="false" />
+
+              <!-- Админ: Активное кольцо (если статус ОК - зеленое, если ошибка - красное) -->
+              <div v-if="isAdmin" class="admin-ring" :class="{ 'error-ring': systemHealth.status === 'error' }"></div>
+
+              <div class="avatar-img-box">
+                <a-avatar :size="135" :src="getAvatarUrl(profile.avatar_url)" class="main-avatar">
+                   <template #icon><user-outlined class="default-icon" /></template>
+                </a-avatar>
+              </div>
+
+              <a-upload v-if="isEditing" name="avatar" :show-upload-list="false" :customRequest="handleUpload" class="avatar-upload-pos">
+                  <button class="btn-mini-edit" title="Загрузить фото"><camera-outlined /></button>
+              </a-upload>
             </div>
+
             <div class="name-block">
-              <h1 class="full-name">{{ profile.last_name }} {{ profile.first_name }}</h1>
-              <div class="specialty-badge" v-if="profile.specialty_name || profile.position">
-                <code-outlined v-if="!isEmployer" /><idcard-outlined v-else /> {{ isEmployer ? profile.position : profile.specialty_name }}
+              <h1 class="full-name">{{ profile.last_name || 'Admin' }} {{ profile.first_name || 'User' }}</h1>
+
+              <div class="specialty-badge admin-badge" v-if="isAdmin">
+                 <safety-certificate-filled /> System Administrator
+              </div>
+              <div class="specialty-badge" v-else-if="profile.specialty_name || profile.position">
+                <code-outlined v-if="isStudent" /><idcard-outlined v-else /> {{ isEmployer ? profile.position : profile.specialty_name }}
               </div>
               <div class="specialty-badge empty" v-else>{{ isEmployer ? 'Должность не указана' : 'Специальность не выбрана' }}</div>
             </div>
@@ -30,88 +49,147 @@
         </div>
 
         <!-- 2. НИЖНЯЯ СЕТКА -->
-        <div class="grid-layout" :class="{ 'single-col': isEmployer }">
+        <div class="grid-layout" :class="{ 'single-col': isEmployer || isAdmin }">
 
           <!-- ЛЕВАЯ КОЛОНКА -->
           <div class="glass-card left-col fade-in card-accent-purple">
-            <idcard-outlined class="bg-icon" />
-            <div class="card-header"><h3><user-outlined /> Личные данные</h3></div>
+            <template v-if="isAdmin">
+               <dashboard-outlined class="bg-icon" />
+               <div class="card-header"><h3><laptop-outlined /> Данные администратора</h3></div>
+            </template>
+            <template v-else>
+               <idcard-outlined class="bg-icon" />
+               <div class="card-header"><h3><user-outlined /> Личные данные</h3></div>
+            </template>
 
+            <!-- ПРОСМОТР ДАННЫХ -->
             <div v-if="!isEditing" class="info-view">
               <div class="info-group">
-                <template v-if="!isEmployer">
-                  <div class="info-row"><span class="label">Дата рождения</span><span class="value">{{ formatDate(profile.birth_date) || '—' }}</span></div>
-                  <div class="info-row"><span class="label">Город</span><span class="value">{{ profile.city || '—' }}</span></div>
-                </template>
+                <!-- СТАНДАРТНЫЕ ПОЛЯ -->
+                <div class="info-row"><span class="label">Email</span><span class="value">{{ profile.email || '—' }}</span></div>
                 <div class="info-row"><span class="label">Телефон</span><span class="value phone">{{ profile.phone || '—' }}</span></div>
-                <div class="info-row"><span class="label">Telegram</span><span class="value telegram"><a v-if="profile.telegram" :href="'https://t.me/' + profile.telegram.replace('@', '')" target="_blank">{{ profile.telegram }}</a><span v-else>—</span></span></div>
-                <div class="info-row" v-if="!isEmployer"><span class="label">Год выпуска</span><span class="value">{{ profile.graduation_year || '—' }}</span></div>
+
+                <template v-if="isStudent">
+                   <div class="info-row"><span class="label">Город</span><span class="value">{{ profile.city || '—' }}</span></div>
+                   <div class="info-row"><span class="label">Год выпуска</span><span class="value">{{ profile.graduation_year || '—' }}</span></div>
+                </template>
+
+                <!-- 🔥 REAL ADMIN METRICS -->
+                <template v-if="isAdmin">
+                   <div class="divider"></div>
+                   <div class="admin-metrics">
+                      <div class="metric-item">
+                          <div class="m-val" :class="getPingColor(systemHealth.ping)">{{ systemHealth.ping ? systemHealth.ping + 'ms' : '...' }}</div>
+                          <div class="m-label">Ping</div>
+                      </div>
+                      <div class="metric-item">
+                          <div class="m-val" :class="systemHealth.status === 'ok' ? 'success' : 'danger'">
+                              {{ systemHealth.status === 'ok' ? 'Online' : 'Offline' }}
+                          </div>
+                          <div class="m-label">API Status</div>
+                      </div>
+                      <div class="metric-item">
+                          <div class="m-val">{{ systemHealth.version }}</div>
+                          <div class="m-label">Version</div>
+                      </div>
+                   </div>
+                </template>
               </div>
-              <div v-if="!isEmployer">
+
+              <div v-if="isStudent">
                 <div class="divider"></div>
                 <div class="about-section"><h4>О себе</h4><p class="about-text">{{ profile.about_me || 'Расскажите о своих навыках...' }}</p></div>
                 <div class="links-section" v-if="profile.portfolio_links && profile.portfolio_links.length"><h4>Портфолио</h4><div class="links-grid"><a v-for="(link, idx) in profile.portfolio_links" :key="idx" :href="link.url" target="_blank" class="modern-link-tag"><component :is="getIconForType(link.type)" /> {{ getLabelForType(link.type) }}</a></div></div>
               </div>
             </div>
 
-            <!-- ФОРМА РЕДАКТИРОВАНИЯ -->
+            <!-- ФОРМА РЕДАКТИРОВАНИЯ (Общая для всех) -->
             <a-form v-else layout="vertical" class="modern-form">
                <div class="form-row-2"><a-form-item label="Фамилия"><a-input v-model:value="form.last_name" class="modern-input" /></a-form-item><a-form-item label="Имя"><a-input v-model:value="form.first_name" class="modern-input" /></a-form-item></div>
+
                <a-form-item label="Должность" v-if="isEmployer"><a-input v-model:value="form.position" class="modern-input" placeholder="Например: HR-менеджер" /></a-form-item>
-               <template v-if="!isEmployer">
+
+               <template v-if="isStudent">
                  <a-form-item label="Специальность"><a-select v-model:value="form.specialty_id" class="modern-select"><a-select-option v-for="s in specialties" :key="s.id" :value="s.id">{{ s.code }} - {{ s.name }}</a-select-option></a-select></a-form-item>
                  <div class="form-row-2"><a-form-item label="Город"><a-select v-model:value="form.city" show-search :options="cityOptions" placeholder="Город" class="modern-select" /></a-form-item><a-form-item label="Дата рождения"><a-input type="date" v-model:value="form.birth_date" class="modern-input" /></a-form-item></div>
                </template>
+
                <div class="form-row-2"><a-form-item label="Телефон" :validate-status="phoneError ? 'error' : ''" :help="phoneError"><a-input v-model:value="form.phone" @change="validatePhone" placeholder="+7..." class="modern-input" /></a-form-item><a-form-item label="Telegram"><a-input v-model:value="form.telegram" prefix="@" class="modern-input" /></a-form-item></div>
-               <template v-if="!isEmployer">
+
+               <template v-if="isStudent">
                  <div class="links-editor"><h4>Ссылки</h4><transition-group name="list"><div v-for="(link, index) in form.portfolio_links" :key="index" class="link-edit-row"><a-select v-model:value="link.type" style="width: 130px" class="mini-select"><a-select-option value="github">GitHub</a-select-option><a-select-option value="telegram">Telegram</a-select-option><a-select-option value="other">Другое</a-select-option></a-select><a-input v-model:value="link.url" placeholder="URL" class="mini-input" /><button class="btn-icon-delete" @click="removeLink(index)"><delete-outlined /></button></div></transition-group><button class="btn-add-link" @click="addLink"><plus-outlined /> Добавить ссылку</button></div>
                  <a-form-item label="О себе"><a-textarea v-model:value="form.about_me" :rows="5" class="modern-input" /></a-form-item>
                </template>
+
                <div class="edit-actions"><a-button type="primary" shape="round" size="large" @click="saveProfile" :disabled="!!phoneError">Сохранить</a-button><a-button shape="round" size="large" @click="cancelEdit" style="margin-left: 10px">Отмена</a-button></div>
             </a-form>
           </div>
 
-          <!-- ПРАВАЯ КОЛОНКА (ТОЛЬКО СТУДЕНТ) -->
-          <div class="right-column-wrapper" v-if="!isEmployer">
+          <!-- ПРАВАЯ КОЛОНКА (АДМИН) -->
+          <div class="right-column-wrapper" v-if="isAdmin">
+             <!-- БЛОК 1: БЫСТРЫЕ ЗАМЕТКИ -->
+             <div class="glass-card right-col fade-in card-accent-blue mb-20">
+                <div class="card-header">
+                   <h3><snippets-outlined /> Admin Notes</h3>
+                   <button class="btn-icon-link" @click="saveNotes"><save-outlined /></button>
+                </div>
+                <a-textarea
+                  v-model:value="adminNotes"
+                  placeholder="Заметки по модерации..."
+                  :rows="6"
+                  class="admin-notes-area"
+                />
+             </div>
 
-            <!-- === БЛОК: ТЕКУЩИЙ ROADMAP (ОБНОВЛЕННЫЙ) === -->
+             <!-- БЛОК 2: РЕАЛЬНЫЕ СИСТЕМНЫЕ ЛОГИ -->
+             <div class="glass-card right-col fade-in card-accent-orange">
+                <div class="card-header">
+                   <h3><history-outlined /> System Logs</h3>
+                   <a-button type="text" size="small" @click="loadSystemLogs" :loading="logsLoading">
+                       <reload-outlined />
+                   </a-button>
+                </div>
+
+                <div class="logs-list">
+                   <div v-if="systemLogs.length === 0 && !logsLoading" class="empty-logs">Логов пока нет</div>
+
+                   <div v-for="log in systemLogs" :key="log.id" class="log-item">
+                      <!-- Иконка зависит от типа лога -->
+                      <div class="log-icon">
+                          <component :is="getLogIcon(log.type)" :style="{ color: getLogColor(log.type) }" />
+                      </div>
+                      <div class="log-content">
+                          <span>{{ log.action }}</span>
+                          <small>{{ new Date(log.created_at).toLocaleString() }}</small>
+                      </div>
+                   </div>
+                </div>
+             </div>
+          </div>
+
+          <!-- ПРАВАЯ КОЛОНКА (СТУДЕНТ) -->
+          <div class="right-column-wrapper" v-if="isStudent">
+            <!-- БЛОК: ТЕКУЩИЙ ROADMAP -->
             <div class="glass-card right-col fade-in card-accent-purple mb-20" v-if="roadmapData.length > 0">
               <div class="card-header">
                 <h3><compass-outlined /> Мое развитие</h3>
                 <router-link to="/roadmap" class="btn-icon-link"><arrow-right-outlined /></router-link>
               </div>
-
               <div class="roadmap-widget-content">
-                 <!-- Название роли (динамическое) -->
                  <h4 class="roadmap-title">{{ currentRoadmapTitle }}</h4>
                  <div class="roadmap-date">{{ formatDate(new Date()) }}</div>
-
-                 <div class="circle-wrapper">
-                    <a-progress type="circle" :percent="currentRoadmapProgress" :width="100" stroke-color="#8b5cf6" />
-                 </div>
-
-                 <div class="rp-next">
-                    <span>Следующий шаг:</span>
-                    <strong>{{ nextRoadmapStep }}</strong>
-                 </div>
+                 <div class="circle-wrapper"><a-progress type="circle" :percent="currentRoadmapProgress" :width="100" stroke-color="#8b5cf6" /></div>
+                 <div class="rp-next"><span>Следующий шаг:</span><strong>{{ nextRoadmapStep }}</strong></div>
               </div>
             </div>
 
-            <!-- === БЛОК: ИСТОРИЯ ОБУЧЕНИЯ (НОВЫЙ) === -->
+            <!-- БЛОК: ИСТОРИЯ ОБУЧЕНИЯ -->
             <div class="glass-card right-col fade-in card-accent-purple mb-20" v-if="roadmapHistory.length > 0">
-               <div class="card-header">
-                  <h3><history-outlined /> История обучения</h3>
-               </div>
-
+               <div class="card-header"><h3><history-outlined /> История обучения</h3></div>
                <div class="history-list">
                   <div v-for="h in roadmapHistory" :key="h.id" class="history-item">
-                     <div class="h-info">
-                        <div class="h-title">{{ h.role_title }}</div>
-                        <div class="h-date">{{ formatDate(h.completed_at) }}</div>
-                     </div>
-                     <div class="h-progress">
-                        <div class="h-score" :class="h.progress === 100 ? 'done' : ''">{{ h.progress }}%</div>
-                     </div>
+                     <div class="h-info"><div class="h-title">{{ h.role_title }}</div><div class="h-date">{{ formatDate(h.completed_at) }}</div></div>
+                     <div class="h-progress"><div class="h-score" :class="h.progress === 100 ? 'done' : ''">{{ h.progress }}%</div></div>
                   </div>
                </div>
             </div>
@@ -157,11 +235,7 @@
                      <button class="btn-add-job"><upload-outlined /></button>
                   </a-upload>
                </div>
-
-               <div v-if="resumes.length === 0" class="empty-timeline">
-                  <p>Нет загруженных резюме</p>
-               </div>
-
+               <div v-if="resumes.length === 0" class="empty-timeline"><p>Нет загруженных резюме</p></div>
                <div class="resume-list">
                   <div v-for="res in resumes" :key="res.id" class="resume-item">
                      <div class="res-icon">
@@ -174,18 +248,14 @@
                      </div>
                      <div class="res-actions">
                         <a :href="getFileUrl(res.file_path)" target="_blank" download class="action-icon"><download-outlined /></a>
-                        <a-popconfirm title="Удалить?" @confirm="deleteResume(res.id)">
-                           <delete-outlined class="action-icon danger" />
-                        </a-popconfirm>
+                        <a-popconfirm title="Удалить?" @confirm="deleteResume(res.id)"><delete-outlined class="action-icon danger" /></a-popconfirm>
                      </div>
                   </div>
                </div>
             </div>
-
           </div>
 
         </div>
-
       </a-spin>
     </div>
   </div>
@@ -200,7 +270,9 @@ import {
   GithubOutlined, LinkedinOutlined, CodeOutlined, CloudServerOutlined, MessageOutlined,
   IdcardOutlined, FlagOutlined, FolderOpenOutlined, FileTextOutlined, UploadOutlined,
   FilePdfOutlined, FileWordOutlined, DownloadOutlined, CompassOutlined, ArrowRightOutlined,
-  HistoryOutlined
+  HistoryOutlined, SafetyCertificateFilled, LaptopOutlined, DashboardOutlined, SnippetsOutlined,
+  SaveOutlined, WarningOutlined, CheckCircleOutlined, UserAddOutlined, ReloadOutlined,
+  InfoCircleOutlined, BugOutlined
 } from '@ant-design/icons-vue';
 
 const RUSSIAN_CITIES = ['Москва', 'Санкт-Петербург', 'Новосибирск', 'Екатеринбург', 'Казань', 'Нижний Новгород', 'Челябинск', 'Красноярск', 'Самара', 'Уфа', 'Ростов-на-Дону', 'Омск', 'Краснодар', 'Воронеж', 'Пермь', 'Волгоград'].map(city => ({ value: city, label: city }));
@@ -212,7 +284,9 @@ export default {
     GithubOutlined, LinkedinOutlined, CodeOutlined, CloudServerOutlined, MessageOutlined,
     IdcardOutlined, FlagOutlined, FolderOpenOutlined, FileTextOutlined, UploadOutlined,
     FilePdfOutlined, FileWordOutlined, DownloadOutlined, CompassOutlined, ArrowRightOutlined,
-    HistoryOutlined
+    HistoryOutlined, SafetyCertificateFilled, LaptopOutlined, DashboardOutlined, SnippetsOutlined,
+    SaveOutlined, WarningOutlined, CheckCircleOutlined, UserAddOutlined, ReloadOutlined,
+    InfoCircleOutlined, BugOutlined
   },
   data() {
     return {
@@ -225,13 +299,22 @@ export default {
       // ROADMAP VARS
       roadmapData: [],
       currentRoadmapTitle: 'My Roadmap',
-      roadmapHistory: []
+      roadmapHistory: [],
+
+      // ADMIN VARS
+      adminNotes: localStorage.getItem('admin_notes') || '',
+      systemLogs: [],
+      logsLoading: false,
+      systemHealth: { ping: null, status: 'unknown', version: '...' }
     };
   },
   computed: {
     isEmployer() { return this.userRole === 'employer'; },
+    isStudent() { return this.userRole === 'graduate'; },
+    isAdmin() { return this.userRole === 'admin'; },
+
     completionRate() {
-      if (this.isEmployer) return 100;
+      if (!this.isStudent) return 100;
       let score = 0; let total = 6;
       if (this.profile.first_name) score++;
       if (this.profile.last_name) score++;
@@ -242,7 +325,6 @@ export default {
       return Math.round((score / total) * 100);
     },
 
-    // ВЫЧИСЛЕНИЕ ПРОГРЕССА КАРТЫ
     currentRoadmapProgress() {
         if (!this.roadmapData.length) return 0;
         const nodes = this.roadmapData.filter(el => el.type === 'custom');
@@ -260,39 +342,125 @@ export default {
     const u = JSON.parse(localStorage.getItem('user') || '{}');
     this.userRole = u.role || 'graduate';
     await this.loadData();
-    if (!this.isEmployer) {
+
+    if (this.isStudent) {
         await Promise.all([
             this.loadSpecialties(),
             this.loadEmployment(),
             this.loadCompanies(),
             this.loadResumes(),
-            this.loadRoadmapData(),    // <-- Загрузка текущей карты
-            this.loadRoadmapHistory()  // <-- Загрузка истории
+            this.loadRoadmapData(),
+            this.loadRoadmapHistory()
         ]);
     }
+
+    // Если админ - грузим логи и проверяем здоровье системы
+    if (this.isAdmin) {
+        this.checkSystemHealth();
+        this.loadSystemLogs();
+        // Можно поставить интервал для обновления статуса
+        setInterval(this.checkSystemHealth, 30000);
+    }
+
     this.loading = false;
   },
   methods: {
     async loadData() {
       try {
-        const url = this.isEmployer ? '/recruiters/me' : '/graduates/me';
+        let url = '/graduates/me';
+        if (this.isEmployer) url = '/recruiters/me';
+        // Если для админа отдельный роут, используем его, иначе фоллбек
+        if (this.isAdmin) url = '/admin/me';
+
         const r = await api.get(url);
         this.profile = r.data;
         if (!this.profile.portfolio_links) this.profile.portfolio_links = [];
-      } catch (e) {}
+      } catch (e) {
+         // Если API для профиля админа нет, создаем локальный
+         if(this.isAdmin) {
+             const user = JSON.parse(localStorage.getItem('user') || '{}');
+             this.profile = {
+                 first_name: user.first_name || 'Admin',
+                 last_name: user.last_name || 'Root',
+                 email: user.email,
+                 phone: user.phone
+             };
+         }
+      }
     },
 
-    // === НОВЫЙ МЕТОД ЗАГРУЗКИ ROADMAP ===
+    // 🔥 РЕАЛЬНАЯ ПРОВЕРКА ЗДОРОВЬЯ СИСТЕМЫ
+    async checkSystemHealth() {
+        const start = Date.now();
+        try {
+            // Делаем легкий запрос (например, на список новостей или health-check)
+            // Если у тебя есть спец. роут /health - используй его
+            await api.get('/news?limit=1');
+            const duration = Date.now() - start;
+
+            this.systemHealth = {
+                ping: duration,
+                status: 'ok',
+                version: 'v1.2.4' // Можно брать из r.headers['x-api-version'] если есть
+            };
+        } catch (e) {
+            this.systemHealth = { ping: null, status: 'error', version: 'Unknown' };
+        }
+    },
+
+    // 🔥 ЗАГРУЗКА РЕАЛЬНЫХ ЛОГОВ
+    async loadSystemLogs() {
+        this.logsLoading = true;
+        try {
+            // Запрашиваем реальные логи с бэкенда
+            const r = await api.get('/admin/logs');
+            // Ожидаем формат: [{ id, action: "User login", type: "info", created_at: "..." }]
+            this.systemLogs = r.data.slice(0, 10); // Берем последние 10
+        } catch(e) {
+            // Если эндпоинта нет, оставляем пустым, не крашим
+            this.systemLogs = [];
+        } finally {
+            this.logsLoading = false;
+        }
+    },
+
+    getLogIcon(type) {
+        const map = {
+            'info': 'InfoCircleOutlined',
+            'warning': 'WarningOutlined',
+            'error': 'BugOutlined',
+            'success': 'CheckCircleOutlined',
+            'user': 'UserAddOutlined'
+        };
+        return map[type] || 'InfoCircleOutlined';
+    },
+
+    getLogColor(type) {
+        const map = {
+            'info': '#1890ff',
+            'warning': '#faad14',
+            'error': '#f5222d',
+            'success': '#52c41a',
+            'user': '#722ed1'
+        };
+        return map[type] || '#8c8c8c';
+    },
+
+    getPingColor(ping) {
+        if (!ping) return 'danger';
+        if (ping < 100) return 'success';
+        if (ping < 300) return 'warning';
+        return 'danger';
+    },
+
     async loadRoadmapData() {
         try {
             const r = await api.get('/chat/roadmap');
             if (r.data) {
-                // Поддержка новой структуры { role, nodes }
                 if (r.data.nodes) {
                     this.roadmapData = r.data.nodes;
                     this.currentRoadmapTitle = r.data.role || 'My Roadmap';
                 }
-                // Поддержка старой структуры (массив)
                 else if (Array.isArray(r.data)) {
                     this.roadmapData = r.data;
                     this.currentRoadmapTitle = 'My Roadmap';
@@ -301,12 +469,16 @@ export default {
         } catch(e) {}
     },
 
-    // === ЗАГРУЗКА ИСТОРИИ ===
     async loadRoadmapHistory() {
         try {
             const r = await api.get('/chat/roadmap/history');
             this.roadmapHistory = r.data;
         } catch(e){}
+    },
+
+    saveNotes() {
+        localStorage.setItem('admin_notes', this.adminNotes);
+        message.success('Заметки сохранены локально');
     },
 
     async loadSpecialties() { try { const r = await api.get('/dict/specialties'); this.specialties = r.data; } catch (e) {} },
@@ -336,7 +508,7 @@ export default {
     removeLink(index) { this.form.portfolio_links.splice(index, 1); },
     getIconForType(type) { const icons = { github: 'GithubOutlined', linkedin: 'LinkedinOutlined', telegram: 'MessageOutlined', leetcode: 'CodeOutlined', disk: 'CloudServerOutlined', other: 'LinkOutlined' }; return icons[type] || 'LinkOutlined'; },
     getLabelForType(type) { const labels = { github: 'GitHub', linkedin: 'LinkedIn', telegram: 'Telegram', leetcode: 'LeetCode', disk: 'Яндекс.Диск', other: 'Ссылка' }; return labels[type] || 'Ссылка'; },
-    async saveProfile() { if (this.phoneError) return message.error('Исправьте ошибки'); try { const url = this.isEmployer ? '/recruiters/me' : '/graduates/me'; const r = await api.put(url, this.form); this.profile = r.data; if (!this.isEmployer && this.form.specialty_id) { const s = this.specialties.find(i => i.id === this.form.specialty_id); if(s) { this.profile.specialty_code = s.code; this.profile.specialty_name = s.name; } } this.isEditing = false; message.success('Сохранено'); } catch (e) { message.error('Ошибка'); } },
+    async saveProfile() { if (this.phoneError) return message.error('Исправьте ошибки'); try { const url = this.isEmployer ? '/recruiters/me' : '/graduates/me'; const r = await api.put(url, this.form); this.profile = r.data; if (this.isStudent && this.form.specialty_id) { const s = this.specialties.find(i => i.id === this.form.specialty_id); if(s) { this.profile.specialty_code = s.code; this.profile.specialty_name = s.name; } } this.isEditing = false; message.success('Сохранено'); } catch (e) { message.error('Ошибка'); } },
     async handleUpload({ file }) { const formData = new FormData(); formData.append('avatar', file); try { const url = this.isEmployer ? '/recruiters/avatar' : '/graduates/avatar'; const r = await api.post(url, formData, { headers: { 'Content-Type': 'multipart/form-data' } }); this.profile.avatar_url = r.data.avatar_url; message.success('Фото обновлено'); } catch (e) { message.error('Ошибка'); } },
     getAvatarUrl(url) { return url ? `http://localhost:4000${url}` : null; },
     openJobForm() { this.jobForm = { id: null, company_id: null, position_title: '', salary_amount: null, start_date: '', end_date: '', is_current: true }; this.showJobForm = true; },
@@ -350,15 +522,59 @@ export default {
 </script>
 
 <style scoped>
-/* ROADMAP WIDGET STYLES */
+/* АДМИНСКИЕ СТИЛИ */
+.admin-theme {
+    background: linear-gradient(135deg, rgba(255,255,255,0.95), rgba(235, 245, 255, 0.9));
+    border-color: #dbeafe;
+}
+.admin-badge {
+    background: #111827 !important;
+    color: #f3f4f6 !important;
+    border: 1px solid #374151;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+}
+.admin-ring {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    border: 4px dashed #93c5fd;
+    border-radius: 50%;
+    animation: spin-slow 20s linear infinite;
+}
+.error-ring { border-color: #f87171; animation-duration: 5s; }
+@keyframes spin-slow { to { transform: rotate(360deg); } }
+
+.admin-metrics { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 15px; }
+.metric-item { flex: 1; background: #fff; padding: 10px; border-radius: 12px; text-align: center; border: 1px solid #e2e8f0; box-shadow: 0 2px 4px rgba(0,0,0,0.03); }
+.m-val { font-weight: 800; font-size: 1.1rem; color: #1e293b; }
+.m-val.success { color: #10b981; }
+.m-val.warning { color: #f59e0b; }
+.m-val.danger { color: #ef4444; }
+.m-label { font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
+
+.admin-notes-area {
+    border: none;
+    background: transparent;
+    font-size: 0.95rem;
+    color: #4b5563;
+    resize: none;
+}
+.admin-notes-area:focus { box-shadow: none; outline: none; }
+
+.logs-list { display: flex; flex-direction: column; gap: 12px; }
+.log-item { display: flex; gap: 12px; align-items: flex-start; padding-bottom: 8px; border-bottom: 1px solid #f1f5f9; }
+.log-item:last-child { border-bottom: none; }
+.log-icon { font-size: 1.1rem; margin-top: 2px; }
+.log-content { display: flex; flex-direction: column; }
+.log-content span { font-weight: 600; font-size: 0.9rem; color: #334155; }
+.log-content small { font-size: 0.75rem; color: #94a3b8; }
+.empty-logs { text-align: center; color: #9ca3af; padding: 20px; font-style: italic; }
+
+/* Остальные стили */
 .roadmap-widget-content { text-align: center; padding: 10px; }
 .roadmap-title { color: #374151; font-weight: 800; margin-bottom: 5px; font-size: 1.1rem; }
 .roadmap-date { font-size: 0.8rem; color: #9ca3af; margin-bottom: 15px; }
 .circle-wrapper { margin-bottom: 15px; }
 .rp-next { margin-top: 10px; font-size: 0.95rem; color: #6b7280; }
 .rp-next strong { color: #8b5cf6; display: block; margin-top: 4px; }
-
-/* HISTORY STYLES */
 .history-list { display: flex; flex-direction: column; gap: 10px; }
 .history-item { display: flex; justify-content: space-between; align-items: center; background: white; padding: 12px 16px; border-radius: 12px; border: 1px solid #e5e7eb; transition: 0.2s; }
 .history-item:hover { border-color: #8b5cf6; transform: translateX(5px); }
@@ -366,8 +582,6 @@ export default {
 .h-date { font-size: 0.8rem; color: #9ca3af; margin-top: 2px; }
 .h-score { font-weight: 800; color: #6366f1; background: #e0e7ff; padding: 4px 10px; border-radius: 8px; font-size: 0.9rem; }
 .h-score.done { color: #059669; background: #d1fae5; }
-
-/* Common Styles (unchanged) */
 .resume-list { display: flex; flex-direction: column; gap: 10px; margin-top: 15px; }
 .resume-item { display: flex; align-items: center; gap: 12px; background: white; padding: 10px; border-radius: 12px; border: 1px solid #e5e7eb; transition: 0.2s; }
 .resume-item:hover { border-color: #1890ff; transform: translateX(5px); }
@@ -446,7 +660,7 @@ export default {
 .form-title { font-weight: 800; margin-bottom: 15px; color: #1f2937; font-size: 1.1rem; }
 .empty-timeline { text-align: center; padding: 30px; color: #9ca3af; }
 .empty-icon-box { font-size: 3rem; color: #e5e7eb; margin-bottom: 10px; }
-.btn-icon-link { color: #8b5cf6; font-size: 1.2rem; transition: 0.2s; display: flex; align-items: center; }
+.btn-icon-link { color: #8b5cf6; font-size: 1.2rem; transition: 0.2s; display: flex; align-items: center; border: none; background: transparent; cursor: pointer; }
 .btn-icon-link:hover { color: #6d28d9; transform: translateX(3px); }
 .fade-in { animation: fadeIn 0.7s cubic-bezier(0.2, 0.8, 0.2, 1); }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }

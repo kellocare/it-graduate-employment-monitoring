@@ -69,7 +69,7 @@
 
             <!-- ХЕДЕР -->
             <div class="chat-header">
-              <div class="header-info">
+              <div class="header-info" @click="openProfileModal" style="cursor: pointer">
                 <div class="header-title">
                   <span v-if="activeChat.role === 'admin'" style="color: #ef4444;">🛡️ Администратор</span>
                   <span v-else>{{ activeChat.name || activeChat.email }}</span>
@@ -79,24 +79,31 @@
                 </div>
               </div>
 
-              <!-- КНОПКИ ДЕЙСТВИЙ (ИСПРАВЛЕНО) -->
+              <!-- КНОПКИ ДЕЙСТВИЙ -->
               <div class="header-actions">
 
-                <!-- 1. Сдать решение (Синяя) -->
+                <!-- 🔥 1. ПРОФИЛЬ (НОВОЕ) -->
+                <a-tooltip title="Информация о пользователе" placement="bottom">
+                  <button class="action-btn btn-gray" @click="openProfileModal">
+                    <info-circle-outlined />
+                  </button>
+                </a-tooltip>
+
+                <!-- 2. Сдать решение -->
                 <a-tooltip title="Отправить решение" placement="bottom">
                   <button v-if="canSendSolution" class="action-btn btn-indigo" @click="showSolutionModal = true">
                     <paper-clip-outlined/>
                   </button>
                 </a-tooltip>
 
-                <!-- 2. Календарь (Зеленая) -->
+                <!-- 3. Календарь -->
                 <a-tooltip title="Назначить интервью" placement="bottom">
                   <button v-if="currentUser && currentUser.role === 'employer'" class="action-btn btn-emerald" @click="showCalendarModal = true">
                     <calendar-outlined/>
                   </button>
                 </a-tooltip>
 
-                <!-- 3. Видео (Красная) -->
+                <!-- 4. Видео -->
                 <a-tooltip title="Видеозвонок" placement="bottom">
                   <button v-if="currentUser && currentUser.role !== 'admin'" class="action-btn btn-rose" @click="startVideoCall">
                     <video-camera-outlined/>
@@ -168,7 +175,57 @@
       </div>
     </div>
 
-    <!-- МОДАЛКИ (Без изменений) -->
+    <!-- === 🔥 МОДАЛКА ПРОФИЛЯ (НОВАЯ) === -->
+    <a-modal v-model:open="showProfileModalState" :footer="null" width="500px" centered class="profile-modal">
+      <div v-if="userProfile" class="profile-card-content">
+        <!-- Обложка -->
+        <div class="profile-cover"></div>
+
+        <!-- Аватар и инфо -->
+        <div class="profile-main-info">
+          <div class="profile-avatar-large">
+             <a-avatar :size="100" :src="getAvatarUrl(userProfile.avatar_url)"
+                       :style="{ backgroundColor: stringToColor(userProfile.name || userProfile.email) }">
+                <template #icon><user-outlined style="font-size: 40px"/></template>
+             </a-avatar>
+          </div>
+          <h2 class="profile-name">{{ userProfile.name || userProfile.email }}</h2>
+          <p class="profile-role">{{ getRoleName(userProfile.role) }}</p>
+          <div v-if="userProfile.city" class="profile-location">
+             <environment-outlined /> {{ userProfile.city }}
+          </div>
+        </div>
+
+        <a-divider style="margin: 15px 0" />
+
+        <!-- Навыки (если есть) -->
+        <div v-if="userProfile.skills && userProfile.skills.length > 0" class="profile-section">
+           <h4>Навыки</h4>
+           <div class="skills-row">
+              <span v-for="skill in userProfile.skills.slice(0, 5)" :key="skill" class="skill-pill">{{ skill }}</span>
+              <span v-if="userProfile.skills.length > 5" class="skill-more">+{{ userProfile.skills.length - 5 }}</span>
+           </div>
+        </div>
+
+        <!-- О себе -->
+        <div class="profile-section" v-if="userProfile.about_me">
+           <h4>О себе</h4>
+           <p class="bio-text">{{ userProfile.about_me }}</p>
+        </div>
+
+        <!-- Кнопка перехода -->
+        <div class="profile-actions">
+           <a-button type="primary" block shape="round" size="large" @click="goToFullProfile">
+              <idcard-outlined /> Открыть полный профиль
+           </a-button>
+        </div>
+      </div>
+      <div v-else class="loading-profile">
+         <loading-outlined spin /> Загрузка профиля...
+      </div>
+    </a-modal>
+
+    <!-- Остальные модалки -->
     <a-modal v-model:open="showSolutionModal" title="Отправка решения" ok-text="Отправить" cancel-text="Отмена" @ok="submitSolution" :confirm-loading="uploading" centered>
        <a-form layout="vertical">
         <a-alert message="Важно" description="AI проверит решение автоматически." type="info" show-icon class="mb-20"/>
@@ -199,7 +256,8 @@ import {
   UserOutlined, SendOutlined, MessageOutlined,
   VideoCameraOutlined, UploadOutlined, TagOutlined,
   PaperClipOutlined, WarningOutlined, EditOutlined,
-  SafetyCertificateFilled, CheckOutlined, FileDoneOutlined, CalendarOutlined
+  SafetyCertificateFilled, CheckOutlined, FileDoneOutlined, CalendarOutlined,
+  InfoCircleOutlined, IdcardOutlined, EnvironmentOutlined, LoadingOutlined // 🔥 Новые иконки
 } from '@ant-design/icons-vue';
 
 export default {
@@ -207,7 +265,8 @@ export default {
     EditVacancyModal, UserOutlined, SendOutlined, MessageOutlined,
     VideoCameraOutlined, UploadOutlined, TagOutlined,
     PaperClipOutlined, WarningOutlined, EditOutlined,
-    SafetyCertificateFilled, CheckOutlined, FileDoneOutlined, CalendarOutlined
+    SafetyCertificateFilled, CheckOutlined, FileDoneOutlined, CalendarOutlined,
+    InfoCircleOutlined, IdcardOutlined, EnvironmentOutlined, LoadingOutlined
   },
   data() {
     return {
@@ -225,7 +284,11 @@ export default {
       showCalendarModal: false,
       interviewDate: '',
       interviewLink: '',
-      solutionSubmittedLocal: false
+      solutionSubmittedLocal: false,
+
+      // 🔥 Данные для профиля
+      showProfileModalState: false,
+      userProfile: null
     };
   },
   computed: {
@@ -295,6 +358,43 @@ export default {
       } catch (e) {
         console.error('Ошибка отправки');
       }
+    },
+    // 🔥 НОВЫЙ МЕТОД: ОТКРЫТИЕ ПРОФИЛЯ
+    async openProfileModal() {
+        if(!this.activeChat) return;
+        this.showProfileModalState = true;
+        this.userProfile = null; // Сброс перед загрузкой
+
+        try {
+            // Попытка получить расширенные данные (если есть такой роут)
+            // Можно адаптировать под ваш API, например /users/:id/public
+            const r = await api.get(`/users/${this.activeChat.user_id}/public-info`);
+            this.userProfile = r.data;
+        } catch (e) {
+            // Если API нет или ошибка, используем данные из чата как fallback
+            console.warn('Не удалось загрузить полный профиль, используем данные чата');
+            this.userProfile = {
+                id: this.activeChat.user_id,
+                name: this.activeChat.name,
+                email: this.activeChat.email,
+                role: this.activeChat.role,
+                avatar_url: this.activeChat.avatar_url,
+                about_me: 'Информация недоступна или не заполнена.',
+                skills: []
+            };
+        }
+    },
+    goToFullProfile() {
+        if(!this.userProfile) return;
+        const id = this.userProfile.id || this.activeChat.user_id;
+        // Логика перехода зависит от роли. Предполагаем роут /profile/:id
+        this.$router.push(`/profile/${id}`);
+    },
+    getRoleName(role) {
+        if (role === 'graduate') return 'Студент';
+        if (role === 'employer') return 'Рекрутер';
+        if (role === 'admin') return 'Администратор';
+        return 'Пользователь';
     },
     openEditModal(id) {
       this.editingVacancyId = id;
@@ -551,9 +651,12 @@ export default {
 .btn-rose { background: #fff1f2; color: #e11d48; }
 .btn-rose:hover { background: #ffe4e6; }
 
-/* 🔥 ЗЕЛЕНАЯ КНОПКА КАЛЕНДАРЯ */
 .btn-emerald { background: #ecfdf5; color: #10b981; }
 .btn-emerald:hover { background: #d1fae5; }
+
+/* 🔥 СЕРАЯ КНОПКА (ИНФО) */
+.btn-gray { background: #f3f4f6; color: #4b5563; }
+.btn-gray:hover { background: #e5e7eb; color: #1f2937; }
 
 
 /* --- MESSAGES AREA --- */
@@ -678,4 +781,28 @@ export default {
 }
 .date-input { width: 100%; padding: 8px; border: 1px solid #d1d5db; border-radius: 6px; }
 .mb-20 { margin-bottom: 20px; }
+
+/* 🔥 СТИЛИ ДЛЯ МОДАЛКИ ПРОФИЛЯ */
+.profile-card-content { text-align: center; margin-top: -20px; }
+.profile-cover {
+  height: 100px; background: linear-gradient(120deg, #a78bfa, #3b82f6);
+  margin: 0 -24px; border-radius: 0;
+}
+.profile-main-info { margin-top: -50px; }
+.profile-avatar-large {
+  display: inline-block; padding: 4px; background: white; border-radius: 50%;
+}
+.profile-name { margin: 10px 0 5px; font-weight: 800; color: #1f2937; font-size: 1.5rem; }
+.profile-role { color: #6b7280; font-size: 0.9rem; margin-bottom: 5px; }
+.profile-location { color: #4b5563; font-size: 0.9rem; display: flex; align-items: center; justify-content: center; gap: 5px; }
+
+.profile-section { text-align: left; margin-bottom: 20px; }
+.profile-section h4 { font-size: 1rem; font-weight: 700; color: #1f2937; margin-bottom: 10px; }
+.bio-text { color: #4b5563; line-height: 1.6; font-size: 0.95rem; white-space: pre-line; }
+
+.skills-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.skill-pill { background: #eff6ff; color: #2563eb; padding: 4px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: 600; }
+.skill-more { background: #f3f4f6; color: #6b7280; padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; }
+
+.loading-profile { text-align: center; padding: 40px; color: #6b7280; font-size: 1.1rem; }
 </style>

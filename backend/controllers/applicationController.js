@@ -238,7 +238,118 @@ ${aiResult.message}
     }
 
     async rejectApplication(req, res) { /* ... */ res.json({}); }
-    async getEmployerApplications(req, res) { /* ... */ res.json({}); }
+
+    // Получить отклики для работодателя
+    // Получить отклики для работодателя
+    async getEmployerApplications(req, res) {
+        try {
+            const userId = req.user.id;
+
+            // 1. Получаем ID компании рекрутера
+            const compRes = await db.query('SELECT id FROM companies WHERE user_id = $1', [userId]);
+            if (compRes.rows.length === 0) return res.json([]);
+
+            const companyId = compRes.rows[0].id;
+
+            // 2. Исправленный SQL запрос
+            const applications = await db.query(`
+                SELECT 
+                    a.id,
+                    a.status,
+                    a.ai_score,
+                    a.ai_feedback,       -- Результат блица
+                    a.cover_letter,
+                    a.created_at,
+                    a.vacancy_id,
+                    
+                    -- Данные для чата и связи берем из USERS (u)
+                    u.id as student_user_id,
+                    u.email,
+                    
+                    -- Личные данные берем из GRADUATES (g) -- ИСПРАВЛЕНО ЗДЕСЬ
+                    g.first_name,
+                    g.last_name,
+                    g.avatar_url,
+                    g.about_me,
+                    g.phone,
+                    g.city,
+                    g.portfolio_links,
+                    
+                    -- Данные вакансии
+                    v.title as vacancy_title,
+
+                    -- Подтягиваем дату интервью (последнее назначенное)
+                    (SELECT scheduled_at FROM interviews i 
+                     WHERE i.vacancy_id = a.vacancy_id AND i.student_id = a.graduate_id 
+                     ORDER BY i.created_at DESC LIMIT 1) as interview_date
+                    
+                FROM applications a
+                JOIN vacancies v ON a.vacancy_id = v.id
+                JOIN graduates g ON a.graduate_id = g.id
+                JOIN users u ON g.user_id = u.id
+                WHERE v.company_id = $1
+                ORDER BY a.created_at DESC
+            `, [companyId]);
+
+            res.json(applications.rows);
+
+        } catch (e) {
+            console.error("Get Employer Apps Error:", e);
+            res.status(500).json({ message: "Ошибка получения откликов" });
+        }
+    }
+    async updateStatus(req, res) {
+        const { id } = req.params;
+        const { status, reason } = req.body;
+
+        try {
+            // 1. Обновляем статус
+            const result = await db.query(
+                'UPDATE applications SET status = $1, reject_reason = $2 WHERE id = $3 RETURNING *',
+                [status, reason || null, id]
+            );
+
+            if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
+            const app = result.rows[0];
+
+            // 2. Получаем user_id студента для уведомления
+            const studentRes = await db.query(
+                `SELECT u.id FROM users u 
+                 JOIN graduates g ON g.user_id = u.id 
+                 WHERE g.id = $1`,
+                [app.graduate_id]
+            );
+            const studentUserId = studentRes.rows[0].id;
+
+            // 3. Формируем текст уведомления
+            let title = 'Статус отклика изменен';
+            let message = `Ваш отклик переведен в статус: ${status}`;
+
+            if (status === 'interview') {
+                title = 'Приглашение на интервью';
+                message = 'Работодатель назначил вам интервью! Проверьте сообщения.';
+            } else if (status === 'offer') {
+                title = '🎉 ОФФЕР!';
+                message = 'Поздравляем! Вам сделали предложение о работе.';
+            } else if (status === 'rejected' || status === 'employer_rejected') {
+                title = 'Отказ по вакансии';
+                message = 'К сожалению, работодатель отклонил вашу кандидатуру.';
+            }
+
+            // 4. Отправляем уведомление в БД
+            await db.query(
+                `INSERT INTO notifications (user_id, title, message, type, is_read)
+                 VALUES ($1, $2, $3, 'info', false)`,
+                [studentUserId, title, message]
+            );
+
+            res.json({ message: 'Status updated', application: app });
+        } catch (e) {
+            console.error(e);
+            res.status(500).json({ error: 'Server error' });
+        }
+    }
+
 }
 
 module.exports = new ApplicationController();

@@ -12,6 +12,8 @@ const newsRouter = require('./routes/newsRoutes');
 const companiesRouter = require('./routes/companiesRoutes');
 const resumeRoutes = require('./routes/resumeRoutes');
 const interviewController = require('./controllers/interviewController');
+const adminTablesRouter = require('./routes/adminTables');
+const usersRouter = require('./routes/usersRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -91,6 +93,9 @@ app.use('/api/companies', companiesRouter);
 // Планирование интервью (добавил /api/ для единообразия)
 app.post('/api/interviews/schedule', authMiddleware, interviewController.schedule);
 
+app.use('/api/admin/tables', adminTablesRouter);
+
+app.use('/api/users', usersRouter);
 
 // Тестовый маршрут (проверка жизни сервера)
 app.get('/', (req, res) => {
