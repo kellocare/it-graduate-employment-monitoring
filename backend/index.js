@@ -14,6 +14,13 @@ const resumeRoutes = require('./routes/resumeRoutes');
 const interviewController = require('./controllers/interviewController');
 const adminTablesRouter = require('./routes/adminTables');
 const usersRouter = require('./routes/usersRoutes');
+const rateLimit = require('express-rate-limit');
+
+const authLimiter = rateLimit({
+	windowMs: 15 * 60 * 1000,
+	max: 5,
+	message: { message: "Слишком много попыток входа. Попробуйте через 15 минут." }
+});
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -30,6 +37,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 // ==============================================
 
 // 1. Авторизация и пользователи
+app.use('/api/auth/', authLimiter);
 app.use('/api/auth', require('./routes/authRoutes'));
 
 // 2. Профиль выпускника
@@ -96,6 +104,8 @@ app.post('/api/interviews/schedule', authMiddleware, interviewController.schedul
 app.use('/api/admin/tables', adminTablesRouter);
 
 app.use('/api/users', usersRouter);
+
+
 
 // Тестовый маршрут (проверка жизни сервера)
 app.get('/', (req, res) => {

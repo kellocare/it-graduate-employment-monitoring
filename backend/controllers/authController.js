@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const mailService = require('../services/mailService');
 const axios = require('axios');
+const { validatePassword, validateEmailDNS, verifyCaptcha } = require('../utils/security');
 
 class AuthController {
     constructor() {
@@ -14,7 +15,16 @@ class AuthController {
     // Регистрация
     async register(req, res) {
         try {
-            const { email, password, role, first_name, last_name } = req.body;
+
+            const { email, password, role, first_name, last_name, captchaToken } = req.body;
+
+            // 2. Проверка Пароля
+            const passError = validatePassword(password);
+            if (passError) return res.status(400).json({ message: passError });
+
+            // 3. Проверка Домена Почты
+            const isEmailValid = await validateEmailDNS(email);
+            if (!isEmailValid) return res.status(400).json({ message: 'Несуществующий домен почты' });
 
             const userCheck = await db.query('SELECT * FROM users WHERE email = $1', [email]);
             if (userCheck.rows.length > 0) {
