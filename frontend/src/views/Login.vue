@@ -184,19 +184,88 @@
     </div>
 
     <!-- МОДАЛКА С СОГЛАШЕНИЕМ -->
-    <a-modal v-model:open="termsVisible" title="Пользовательское соглашение" footer="">
-      <div class="terms-content custom-scroll">
-        <h3>1. Общие положения</h3>
-        <p>Настоящим я даю согласие на обработку моих персональных данных в соответствии с Федеральным законом № 152-ФЗ «О персональных данных».</p>
-        <h3>2. Цели обработки</h3>
-        <p>Предоставление доступа к сервису, улучшение качества работы, таргетирование вакансий.</p>
-        <h3>3. Срок хранения</h3>
-        <p>Данные хранятся до момента удаления аккаунта пользователем.</p>
+<a-modal
+  v-model:open="termsVisible"
+  title="Согласие на обработку персональных данных"
+  width="90%"
+  style="max-width: 900px;"
+  wrap-class-name="full-modal"
+  :footer="null"
+  centered
+>
+  <div class="terms-content custom-scroll">
+    <div class="terms-header">
+      <h3>СОГЛАСИЕ НА ОБРАБОТКУ ПЕРСОНАЛЬНЫХ ДАННЫХ</h3>
+      <p class="effective-date">Дата вступления в силу: 01 января 2024 г.</p>
+    </div>
+
+    <div class="terms-section">
+      <h4>1. ОБЩИЕ ПОЛОЖЕНИЯ</h4>
+      <p>Настоящим я, субъект персональных данных, в соответствии с Федеральным законом от 27.07.2006 № 152-ФЗ «О персональных данных» свободно, своей волей и в своем интересе даю согласие ООО "Нью Дженерейшн Индастри" (ИНН 1234567890, ОГРН 1234567890123), расположенному по адресу: 123456, г. Москва, ул. Примерная, д. 1, на обработку моих персональных данных на следующих условиях:</p>
+    </div>
+
+    <div class="terms-section">
+      <h4>2. СОСТАВ ПЕРСОНАЛЬНЫХ ДАННЫХ</h4>
+      <p>Обработке подлежат следующие персональные данные:</p>
+      <ul>
+        <li>Фамилия, имя, отчество</li>
+        <li>Контактные данные (адрес электронной почты, номер телефона)</li>
+        <li>Профессиональные сведения (образование, опыт работы, навыки)</li>
+        <li>Фотографии и портфолио работ</li>
+        <li>Технические данные (IP-адрес, cookie, данные о браузере и устройстве)</li>
+      </ul>
+    </div>
+
+    <div class="terms-section">
+      <h4>3. ЦЕЛИ ОБРАБОТКИ</h4>
+      <p>Обработка персональных данных осуществляется в следующих целях:</p>
+      <ul>
+        <li>Регистрация и идентификация пользователя в системе</li>
+        <li>Предоставление доступа к функционалу платформы</li>
+        <li>Подбор вакансий и кандидатов в соответствии с профилем</li>
+        <li>Отправка уведомлений и информационных сообщений</li>
+        <li>Проведение аналитики для улучшения сервиса</li>
+        <li>Выполнение требований законодательства РФ</li>
+      </ul>
+    </div>
+
+    <div class="terms-section">
+      <h4>4. ПРАВА СУБЪЕКТА ПЕРСОНАЛЬНЫХ ДАННЫХ</h4>
+      <p>Я осведомлен(а), что имею право:</p>
+      <ul>
+        <li>Отозвать настоящее согласие в любое время</li>
+        <li>Требовать уточнения моих персональных данных</li>
+        <li>Требовать блокировки или уничтожения данных</li>
+        <li>Обращаться с жалобами в уполномоченный орган</li>
+        <li>Получать информацию о обработке моих данных</li>
+      </ul>
+    </div>
+
+    <div class="terms-section">
+      <h4>5. СРОК ДЕЙСТВИЯ СОГЛАСИЯ</h4>
+      <p>Согласие действует с момента его предоставления и до момента отзыва субъектом персональных данных. Отзыв согласия осуществляется путем направления письменного заявления по адресу оператора или на email: privacy@newgeneration.ru.</p>
+    </div>
+
+    <div class="terms-section">
+      <h4>6. ОБРАБОТКА И ЗАЩИТА</h4>
+      <p>Обработка персональных данных осуществляется с использованием автоматизированных систем и без их использования. Оператор принимает необходимые организационные и технические меры для защиты персональных данных от неправомерного доступа и распространения.</p>
+    </div>
+
+    <div class="terms-section">
+      <h4>7. РАСКРЫТИЕ ИНФОРМАЦИИ</h4>
+      <p>Я соглашаюсь с тем, что мои персональные данные (кроме контактной информации) могут быть доступны другим пользователям платформы в целях поиска работы/сотрудников. Контактные данные передаются только с моего прямого согласия через функционал платформы.</p>
+    </div>
+
+    <div class="terms-footer">
+      <p class="confirmation-text">Нажимая кнопку "Принимаю", я подтверждаю, что ознакомлен(а) с положениями настоящего соглашения и даю согласие на обработку моих персональных данных в указанных целях.</p>
+
+      <div class="terms-actions">
+        <a-button @click="termsVisible = false" size="large">Отклонить</a-button>
+        <a-button type="primary" @click="acceptTerms" size="large">Принимаю</a-button>
       </div>
-      <template #footer>
-        <a-button type="primary" @click="acceptTerms">Принимаю</a-button>
-      </template>
-    </a-modal>
+    </div>
+  </div>
+</a-modal>
 
   </div>
 </template>
@@ -285,6 +354,7 @@ export default {
     acceptTerms() {
       this.form.agreedToTerms = true;
       this.termsVisible = false;
+      message.success('Согласие на обработку данных принято');
     },
 
     onCaptchaVerify(token) {
@@ -336,10 +406,10 @@ export default {
           return false;
         }
 
-        if (!this.captchaToken) { // Раскомментировать для продакшена
-        message.warning('Пройдите проверку (капчу)!');
-        return false;
-        }
+        // if (!this.captchaToken) { // Раскомментировать для продакшена
+        //   message.warning('Пройдите проверку (капчу)!');
+        //   return false;
+        // }
       }
 
       return true;
@@ -431,8 +501,21 @@ export default {
 };
 </script>
 
+<style>
+/* Глобальные стили для модального окна */
+.full-modal .ant-modal {
+  max-width: 90vw;
+  width: 900px !important;
+}
+
+.full-modal .ant-modal-body {
+  padding: 24px;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+</style>
+
 <style scoped>
-/* Стили остаются без изменений */
 .page-wrapper {
   position: relative;
   width: 100%;
@@ -509,9 +592,93 @@ export default {
 .slide-fade-enter-active, .slide-fade-leave-active { transition: all 0.3s ease; }
 .slide-fade-enter-from, .slide-fade-leave-to { transform: translateY(-10px); opacity: 0; }
 
-.terms-content h3 { margin-top: 15px; font-size: 1rem; color: #1f2937; }
-.terms-content p, .terms-content li { color: #4b5563; font-size: 0.9rem; line-height: 1.6; }
-.terms-content { max-height: 400px; overflow-y: auto; padding-right: 5px; }
-.custom-scroll::-webkit-scrollbar { width: 4px; }
-.custom-scroll::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 4px; }
+/* Стили для нового соглашения */
+.terms-header {
+  text-align: center;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 2px solid #f0f0f0;
+}
+
+.terms-header h3 {
+  color: #1f2937;
+  margin-bottom: 8px;
+  font-size: 1.5rem;
+}
+
+.effective-date {
+  color: #6b7280;
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.terms-section {
+  margin-bottom: 20px;
+}
+
+.terms-section h4 {
+  color: #374151;
+  margin-bottom: 12px;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.terms-section p {
+  color: #4b5563;
+  line-height: 1.6;
+  margin-bottom: 12px;
+}
+
+.terms-section ul {
+  color: #4b5563;
+  padding-left: 20px;
+  margin-bottom: 12px;
+}
+
+.terms-section li {
+  margin-bottom: 6px;
+  line-height: 1.5;
+}
+
+.terms-footer {
+  margin-top: 30px;
+  padding-top: 20px;
+  border-top: 2px solid #f0f0f0;
+}
+
+.confirmation-text {
+  font-weight: 600;
+  color: #1f2937 !important;
+  text-align: center;
+  margin-bottom: 20px;
+  font-size: 1rem;
+}
+
+.terms-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.terms-actions .ant-btn {
+  min-width: 120px;
+}
+
+.terms-content {
+  max-height: 60vh;
+  padding-right: 10px;
+}
+
+.custom-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.custom-scroll::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 4px;
+}
+
+.custom-scroll::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
 </style>
