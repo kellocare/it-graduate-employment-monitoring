@@ -15,6 +15,7 @@ const interviewController = require('./controllers/interviewController');
 const adminTablesRouter = require('./routes/adminTables');
 const usersRouter = require('./routes/usersRoutes');
 const rateLimit = require('express-rate-limit');
+const universityRouter = require('./routes/universityRouter');
 
 const authLimiter = rateLimit({
 	windowMs: 15 * 60 * 1000,
@@ -105,7 +106,7 @@ app.use('/api/admin/tables', adminTablesRouter);
 
 app.use('/api/users', usersRouter);
 
-
+app.use('/api/university', universityRouter);
 
 // Тестовый маршрут (проверка жизни сервера)
 app.get('/', (req, res) => {

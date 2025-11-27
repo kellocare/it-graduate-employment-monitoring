@@ -11,7 +11,7 @@
     <div class="content-container">
 
       <!-- ========================================= -->
-      <!-- ВЕРСИЯ ДЛЯ АДМИНА                         -->
+      <!-- 1. ВЕРСИЯ ДЛЯ АДМИНА                      -->
       <!-- ========================================= -->
       <template v-if="isAdmin">
         <div class="welcome-banner admin-banner fade-in-up">
@@ -39,26 +39,146 @@
                  <div class="glass-card action-card fade-in-up" style="animation-delay: 0.5s" @click="$router.push('/admin/news')"><div class="icon-box pink-gradient"><read-filled /></div><div class="card-text"><h4>Новости</h4><p>Публикации</p></div></div>
                  <div class="glass-card action-card fade-in-up" style="animation-delay: 0.6s" @click="$router.push('/admin/logs')"><div class="icon-box gray-gradient"><history-outlined /></div><div class="card-text"><h4>Журнал</h4><p>Логи действий</p></div></div>
               </div>
-
-              <h3 class="section-title fade-in-up mt-40" style="animation-delay: 0.3s"><hourglass-filled class="title-icon" style="color: #f59e0b;" /> Требуют проверки</h3>
-              <div class="glass-card list-card fade-in-up" style="animation-delay: 0.4s">
-                 <div v-if="pendingVacanciesList.length === 0" class="empty-mini"><check-circle-two-tone two-tone-color="#52c41a" style="font-size: 24px" /><p>Все проверено!</p></div>
-                 <div v-else class="mini-list">
-                    <div v-for="vac in pendingVacanciesList.slice(0, 3)" :key="vac.id" class="mini-item" @click="$router.push('/admin/vacancies')"><div class="mini-icon"><file-text-outlined /></div><div class="mini-info"><div class="mini-title">{{ vac.title }}</div><div class="mini-sub">{{ vac.company_name }}</div></div><right-outlined class="arrow-light" /></div>
-                    <div class="view-all" @click="$router.push('/admin/vacancies')">Смотреть все ({{ pendingVacanciesList.length }})</div>
-                 </div>
-              </div>
            </div>
-
            <div class="right-column">
-              <div class="glass-card widget-card fade-in-up" style="animation-delay: 0.3s"><div class="widget-header"><hdd-filled style="color: #10b981" /> <span>System Status</span></div><div class="server-status-list"><div class="status-row"><span>API Gateway</span><span class="status-val ok">Online</span></div><div class="status-row"><span>Database</span><span class="status-val ok">Connected</span></div><div class="status-row"><span>AI Service</span><span class="status-val ok">Active</span></div><div class="status-row"><span>Server Load</span><span class="status-val">12%</span></div></div></div>
-              <div class="glass-card widget-card fade-in-up" style="animation-delay: 0.4s"><div class="widget-header"><user-add-outlined style="color: #6366f1" /> <span>Новые пользователи</span></div><div class="users-mini-list"><div v-for="u in latestUsers.slice(0, 4)" :key="u.id" class="user-mini-item"><a-avatar size="small" style="background-color: #87d068">{{ u.email[0].toUpperCase() }}</a-avatar><span class="u-email">{{ u.email }}</span><span class="u-role">{{ u.role === 'employer' ? 'HR' : 'Stud' }}</span></div></div><div class="view-all-link" @click="$router.push('/admin/users')">Все пользователи</div></div>
+              <div class="glass-card widget-card fade-in-up" style="animation-delay: 0.3s"><div class="widget-header"><hdd-filled style="color: #10b981" /> <span>System Status</span></div><div class="server-status-list"><div class="status-row"><span>API Gateway</span><span class="status-val ok">Online</span></div><div class="status-row"><span>Database</span><span class="status-val ok">Connected</span></div></div></div>
            </div>
         </div>
       </template>
 
       <!-- ========================================= -->
-      <!-- ВЕРСИЯ ДЛЯ ПОЛЬЗОВАТЕЛЕЙ (СТУДЕНТ/HR)   -->
+      <!-- 2. ВЕРСИЯ ДЛЯ СОТРУДНИКА ВУЗА (ОБНОВЛЕНО) -->
+      <!-- ========================================= -->
+      <template v-else-if="isUniversity">
+        <!-- 🔥 ДОБАВЛЕН КЛАСС university-banner -->
+        <div class="welcome-banner university-banner fade-in-up">
+          <div class="banner-content">
+            <div class="badges-row">
+               <div class="greeting-badge university-badge">
+                 <bank-filled /> University Staff
+               </div>
+               <div class="greeting-badge time-badge">
+                 <span class="dot-pulse"></span> {{ timeOfDay }}
+               </div>
+            </div>
+
+            <h1>{{ user?.first_name || 'Коллега' }}, хорошего дня!</h1>
+            <p class="subtitle">Панель мониторинга трудоустройства и управления данными студентов.</p>
+
+            <div class="stats-row" v-if="univStats">
+              <div class="stat-glass">
+                <strong>{{ univStats.kpi?.total || 0 }}</strong>
+                <span>Выпускников</span>
+              </div>
+              <div class="stat-glass">
+                <strong>{{ univStats.kpi?.rate || 0 }}%</strong>
+                <span>Трудоустроено</span>
+              </div>
+            </div>
+          </div>
+          <div class="banner-image-wrapper">
+             <img src="https://cdn3d.iconscout.com/3d/premium/thumb/university-building-4996024-4160025.png" class="banner-img floating" style="filter: drop-shadow(0 20px 30px rgba(13, 148, 136, 0.4));" />
+          </div>
+        </div>
+
+        <div class="dashboard-grid">
+           <div class="left-column">
+              <h3 class="section-title fade-in-up" style="animation-delay: 0.1s">
+                <appstore-filled class="title-icon" style="color: #0891b2" /> Основные разделы
+              </h3>
+
+              <div class="actions-grid">
+                 <div class="glass-card action-card fade-in-up" style="animation-delay: 0.2s" @click="$router.push('/university/students')">
+                    <div class="icon-box teal-gradient"><team-outlined /></div>
+                    <div class="card-text">
+                        <h4>Студенты</h4>
+                        <p>База выпускников</p>
+                    </div>
+                    <div class="hover-arrow"><arrow-right-outlined /></div>
+                 </div>
+
+                 <div class="glass-card action-card fade-in-up" style="animation-delay: 0.3s" @click="$router.push('/university/dashboard')">
+                    <div class="icon-box indigo-gradient"><pie-chart-filled /></div>
+                    <div class="card-text">
+                        <h4>Аналитика</h4>
+                        <p>Графики и KPI</p>
+                    </div>
+                    <div class="hover-arrow"><arrow-right-outlined /></div>
+                 </div>
+
+                 <div class="glass-card action-card fade-in-up" style="animation-delay: 0.4s" @click="$router.push('/university/students')">
+                    <div class="icon-box gold-gradient"><file-excel-outlined /></div>
+                    <div class="card-text">
+                        <h4>Отчетность</h4>
+                        <p>Выгрузка Excel</p>
+                    </div>
+                    <div class="hover-arrow"><arrow-right-outlined /></div>
+                 </div>
+
+                 <div class="glass-card action-card fade-in-up" style="animation-delay: 0.5s" @click="$router.push('/messages')">
+                    <div class="icon-box purple-gradient"><message-filled /></div>
+                    <div class="card-text">
+                        <h4>Сообщения</h4>
+                        <p>Связь со студентами</p>
+                    </div>
+                    <div class="notification-badge" v-if="msgCount > 0">{{ msgCount }}</div>
+                 </div>
+              </div>
+
+              <!-- Новости платформы -->
+              <h3 class="section-title fade-in-up mt-40" style="animation-delay: 0.4s">
+                 <bell-filled class="title-icon" style="color: #f59e0b;" /> Новости платформы
+              </h3>
+              <div class="news-list fade-in-up" style="animation-delay: 0.5s">
+                 <div class="glass-card news-card risk-alert" v-if="univStats?.kpi?.at_risk > 0" @click="$router.push('/university/dashboard')">
+                    <div class="news-body">
+                       <div class="news-meta" style="color: #ef4444; font-weight: bold;"><fire-filled /> Требует внимания</div>
+                       <h4>В зоне риска: {{ univStats.kpi.at_risk }} студентов</h4>
+                       <p>Выпускники, которые находятся в поиске работы более 6 месяцев.</p>
+                    </div>
+                 </div>
+
+                 <div v-if="newsList.length === 0 && !univStats?.kpi?.at_risk" class="empty-news">Новостей пока нет</div>
+
+                 <div v-for="news in newsList.slice(0, 3)" :key="news.id" class="glass-card news-card" @click="openNewsModal(news)">
+                    <div v-if="news.image_url" class="news-img" :style="{ backgroundImage: `url(${news.image_url})` }"></div>
+                    <div class="news-body">
+                       <div class="news-meta">{{ new Date(news.created_at).toLocaleDateString() }}</div>
+                       <h4>{{ news.title }}</h4>
+                       <p>{{ news.content }}</p>
+                    </div>
+                 </div>
+              </div>
+           </div>
+
+           <div class="right-column">
+              <div class="glass-card widget-card fade-in-up" style="animation-delay: 0.3s">
+                 <div class="widget-header"><thunderbolt-filled style="color: #0d9488" /> <span>Эффективность</span></div>
+                 <div class="server-status-list">
+                    <div class="status-row">
+                       <span>Трудоустройство</span>
+                       <span class="status-val ok">{{ univStats?.kpi?.rate || 0 }}%</span>
+                    </div>
+                    <div class="status-row">
+                       <span>Средняя ЗП</span>
+                       <span class="status-val">{{ formatMoney(univStats?.kpi?.avg_salary || 0) }} ₽</span>
+                    </div>
+                 </div>
+              </div>
+
+              <div class="glass-card widget-card fade-in-up" style="animation-delay: 0.4s">
+                 <div class="widget-header"><clock-circle-outlined style="color: #6366f1" /> <span>Статус системы</span></div>
+                 <a-timeline class="custom-timeline">
+                    <a-timeline-item color="green">Вход выполнен</a-timeline-item>
+                    <a-timeline-item color="blue">Данные обновлены</a-timeline-item>
+                 </a-timeline>
+              </div>
+           </div>
+        </div>
+      </template>
+
+      <!-- ========================================= -->
+      <!-- 3. ВЕРСИЯ ДЛЯ СТУДЕНТА / HR               -->
       <!-- ========================================= -->
       <template v-else>
         <div class="welcome-banner fade-in-up" :class="{ 'employer-banner': isEmployer }">
@@ -102,7 +222,6 @@
               </div>
             </div>
 
-            <!-- НОВОСТИ ПЛАТФОРМЫ -->
             <h3 class="section-title fade-in-up mt-40" style="animation-delay: 0.4s"><bell-filled style="color: #f59e0b;" class="title-icon" /> Новости платформы</h3>
             <div class="news-list fade-in-up" style="animation-delay: 0.5s">
                <div v-if="newsList.length === 0" class="empty-news">Пока новостей нет</div>
@@ -133,14 +252,8 @@
 
     </div>
 
-    <!-- === НОВАЯ МОДАЛКА НОВОСТИ === -->
-    <a-modal
-      v-model:open="newsModalVisible"
-      :footer="null"
-      width="700px"
-      centered
-      class="news-modal"
-    >
+    <!-- МОДАЛКИ (Без изменений) -->
+    <a-modal v-model:open="newsModalVisible" :footer="null" width="700px" centered class="news-modal">
       <div v-if="selectedNews" class="news-modal-content">
          <div class="news-hero" v-if="selectedNews.image_url" :style="{ backgroundImage: `url(${selectedNews.image_url})` }"></div>
          <div class="news-detail-body">
@@ -152,7 +265,6 @@
       </div>
     </a-modal>
 
-    <!-- Старые модалки (Detail, Test) -->
     <a-modal v-model:open="detailVisible" :footer="null" width="750px" centered class="vacancy-modal"><div v-if="selectedVacancy" class="modal-content-inner"><div class="modal-hero"><div class="modal-badge">{{ selectedVacancy.company_name }}</div><h2>{{ selectedVacancy.title }}</h2><div class="modal-meta"><span v-if="selectedVacancy.salary_min" class="salary-tag">{{ formatMoney(selectedVacancy.salary_min) }} ₽</span><span class="date-tag"><calendar-outlined /> {{ formatDate(selectedVacancy.created_at) }}</span></div></div><div class="ai-insight-box" v-if="selectedVacancy.ai_summary"><div class="ai-title"><robot-filled /> AI Резюме</div><p class="ai-text">{{ selectedVacancy.ai_summary }}</p></div><div class="modal-section"><h4>Требуемые навыки</h4><div class="skills-cloud"><span v-for="skill in selectedVacancy.skills" :key="skill" class="skill-tag large">{{ skill }}</span></div></div><div class="modal-section"><h4>Описание вакансии</h4><p class="desc-text">{{ selectedVacancy.description }}</p></div><div class="modal-footer-row"><div class="contact-info" v-if="selectedVacancy.contact_email"><mail-outlined /> {{ selectedVacancy.contact_email }}</div><a-button v-if="user && user.role === 'graduate'" type="primary" class="btn-respond" @click="startFromDetail(selectedVacancy.id)">Откликнуться</a-button></div></div></a-modal>
     <a-modal v-model:open="showTestModal" :footer="null" width="600px"><div class="modal-content-wrapper"><div v-if="testLoading" class="center"><div class="spinner-icon"><robot-outlined spin /></div><h3>ИИ генерирует тест...</h3></div><div v-else-if="currentApplication && !testResult" class="modal-body"><h3>Отклик на вакансию</h3><div class="form-group mt-20"><label>Сопроводительное письмо</label><a-textarea v-model:value="coverLetter" :rows="3" /></div><a-divider /><h4>Блиц-тест от ИИ</h4><div class="questions-list"><div v-for="(question, index) in currentApplication.test_tasks" :key="index" class="question-item"><p class="q-text"><strong>{{ index + 1 }}:</strong> {{ question }}</p><a-textarea v-model:value="studentAnswers[index]" :rows="2" /></div></div><div class="modal-actions"><button class="btn-submit" @click="submitAnswers" :disabled="submitting">{{ submitting ? '...' : 'Отправить' }}</button><button class="btn-close-text" @click="cancelAndClose">Отмена</button></div></div><div v-else-if="testResult" class="modal-body result-box"><div class="score-circle">{{ testResult.ai_score }}</div><h3>{{ testResult.status === 'accepted' ? 'Успех!' : 'Отказ' }}</h3><button class="btn-close-main" @click="closeModal">Закрыть</button></div></div></a-modal>
 
@@ -164,14 +276,13 @@ import { useRouter, useRoute } from 'vue-router';
 import { computed, ref, onMounted, watch } from 'vue';
 import api from '../axios';
 import { message } from 'ant-design-vue';
-// 🔥 ИСПРАВЛЕНО: ДОБАВЛЕН RobotOutlined и другие иконки
 import {
   AppstoreFilled, MessageFilled, IdcardFilled, RobotFilled, ArrowRightOutlined, CheckCircleFilled, ThunderboltFilled, BulbFilled,
   BankFilled, RocketFilled, ClockCircleOutlined, CloseCircleOutlined, SmileTwoTone, FireFilled, ReadFilled, MailOutlined,
   LoadingOutlined, FormOutlined, ThunderboltTwoTone, CheckCircleTwoTone, CloseCircleTwoTone, CalendarOutlined,
   TeamOutlined, PlusCircleFilled, UserAddOutlined, SecurityScanFilled, AuditOutlined, LineChartOutlined, HddFilled, UserOutlined,
   HourglassFilled, FileTextOutlined, RightOutlined, BellFilled, HistoryOutlined,
-  RobotOutlined // <--- ДОБАВЛЕНО
+  RobotOutlined, PieChartFilled, FileExcelOutlined
 } from '@ant-design/icons-vue';
 
 export default {
@@ -182,23 +293,62 @@ export default {
     LoadingOutlined, FormOutlined, ThunderboltTwoTone, CheckCircleTwoTone, CloseCircleTwoTone, CalendarOutlined,
     TeamOutlined, PlusCircleFilled, UserAddOutlined, SecurityScanFilled, AuditOutlined, LineChartOutlined, HddFilled, UserOutlined,
     HourglassFilled, FileTextOutlined, RightOutlined, BellFilled, HistoryOutlined,
-    RobotOutlined // <--- ДОБАВЛЕНО
+    RobotOutlined, PieChartFilled, FileExcelOutlined
   },
   setup(props) {
     const router = useRouter();
     const route = useRoute();
-    const currentUser = ref(null);
 
+    // 1. 🔥 МГНОВЕННАЯ ИНИЦИАЛИЗАЦИЯ (Считываем localStorage сразу)
+    const getStoredUser = () => {
+        const stored = localStorage.getItem('user');
+        try {
+            return stored ? JSON.parse(stored) : null;
+        } catch (e) { return null; }
+    };
+
+    const localUser = ref(getStoredUser());
+
+    // Вычисляем текущего юзера (Props -> LocalState -> Null)
+    const currentUser = computed(() => props.user || localUser.value);
+
+    // 2. 🔥 ЯВНЫЕ РОЛИ (Для отладки)
+    const role = computed(() => currentUser.value?.role);
+    const isAdmin = computed(() => role.value === 'admin');
+    const isEmployer = computed(() => role.value === 'employer');
+    const isUniversity = computed(() => role.value === 'university_staff');
+
+    // Логика баннера
+    const bannerImage = computed(() => {
+        // console.log("DEBUG ROLE:", role.value); // Раскомментируй для отладки
+
+        if (isAdmin.value) return 'https://static.tildacdn.com/tild3039-3361-4834-a533-386335343639/___9.png';
+
+        // Твоя ссылка для ВУЗа
+        if (isUniversity.value) {
+            return 'https://nowshopfun.com/cdn/shop/files/stellata-turquoise-seym-2.png?v=1741184190&width=1080';
+        }
+
+        if (isEmployer.value) {
+            return 'https://i.pinimg.com/originals/80/b6/f7/80b6f7ced693e43cf3d1d6e7e69277c0.png';
+        }
+
+        // Дефолт (Студент)
+        return 'https://cdn2.iconfinder.com/data/icons/3d-abstract-iridescent-shape/512/ABSTRACT_OBJEct_v2_1.png';
+    });
+
+    // Остальные переменные
     const msgCount = ref(0);
     const vacancies = ref([]);
     const applications = ref([]);
     const myVacanciesCount = ref(0);
     const newsList = ref([]);
-
     const adminStats = ref({ pendingVacancies: 0, totalUsers: 0 });
+    const univStats = ref(null);
     const pendingVacanciesList = ref([]);
     const latestUsers = ref([]);
 
+    // Модалки
     const detailVisible = ref(false);
     const selectedVacancy = ref(null);
     const showTestModal = ref(false);
@@ -208,21 +358,23 @@ export default {
     const testResult = ref(null);
     const studentAnswers = ref([]);
     const coverLetter = ref('');
-
     const newsModalVisible = ref(false);
     const selectedNews = ref(null);
 
-    const isAdmin = computed(() => currentUser.value?.role === 'admin');
-    const isEmployer = computed(() => currentUser.value?.role === 'employer');
-
-    const bannerImage = computed(() => {
-        if (isAdmin.value) return 'https://static.tildacdn.com/tild3039-3361-4834-a533-386335343639/___9.png';
-        return isEmployer.value ? 'https://i.pinimg.com/originals/80/b6/f7/80b6f7ced693e43cf3d1d6e7e69277c0.png' : 'https://cdn2.iconfinder.com/data/icons/3d-abstract-iridescent-shape/512/ABSTRACT_OBJEct_v2_1.png';
+    const timeOfDay = computed(() => {
+        const h = new Date().getHours();
+        if (h >= 5 && h < 12) return 'Доброе утро';
+        if (h >= 12 && h < 18) return 'Добрый день';
+        if (h >= 18 && h < 23) return 'Добрый вечер';
+        return 'Доброй ночи';
     });
 
+    // Загрузка данных
     const loadData = async () => {
-        const userData = localStorage.getItem('user');
-        if (userData) currentUser.value = JSON.parse(userData);
+        // Обновляем данные юзера, если их нет
+        if (!currentUser.value) {
+             localUser.value = getStoredUser();
+        }
         if (!currentUser.value) return;
 
         try {
@@ -242,6 +394,10 @@ export default {
                 latestUsers.value = usersRes.data;
                 adminStats.value = { pendingVacancies: pendingVacanciesList.value.length, totalUsers: usersRes.data.length };
             }
+            else if (isUniversity.value) {
+                const res = await api.get('/university/stats');
+                univStats.value = res.data;
+            }
             else if (isEmployer.value) {
                 const appRes = await api.get('/applications/employer');
                 applications.value = appRes.data;
@@ -252,36 +408,29 @@ export default {
                 const vacRes = await api.get('/vacancies');
                 vacancies.value = vacRes.data;
                 const profRes = await api.get('/graduates/me');
-                if(currentUser.value) currentUser.value.fullProfile = profRes.data;
+                if (localUser.value) {
+                    // Обновляем вложенный профиль, не затирая основной объект
+                    localUser.value = { ...localUser.value, fullProfile: profRes.data };
+                }
             }
-        } catch (e) {}
+        } catch (e) { console.error(e); }
     };
 
-    const openNewsModal = (news) => {
-        selectedNews.value = news;
-        newsModalVisible.value = true;
-    };
-
+    // Методы модалок и переходов
+    const openNewsModal = (news) => { selectedNews.value = news; newsModalVisible.value = true; };
     const checkNewsParam = () => {
         const newsId = route.query.news_id;
         if (newsId && newsList.value.length > 0) {
             const target = newsList.value.find(n => n.id == newsId);
-            if (target) {
-                openNewsModal(target);
-                router.replace({ query: null });
-            }
+            if (target) { openNewsModal(target); router.replace({ query: null }); }
         }
     };
-
-    watch(() => route.query.news_id, (newId) => {
-        if (newId && newsList.value.length > 0) checkNewsParam();
-    });
+    watch(() => route.query.news_id, (newId) => { if (newId && newsList.value.length > 0) checkNewsParam(); });
 
     onMounted(loadData);
 
     const goToProfile = () => router.push(isEmployer.value ? '/employer' : '/profile');
     const getWelcomeMessage = () => isEmployer.value ? 'Управляйте наймом.' : 'Новые вакансии ждут.';
-    const timeOfDay = computed(() => { const h = new Date().getHours(); return h<12?'Доброе утро':h<18?'Добрый день':'Добрый вечер'; });
 
     const recommendedVacancies = computed(() => {
        if(!currentUser.value?.fullProfile?.about_me) return [];
@@ -300,7 +449,9 @@ export default {
     const getAvatarUrl = (url) => url ? `http://localhost:4000${url}` : null;
 
     return {
-        user: currentUser, isAdmin, isEmployer, adminStats, pendingVacanciesList, latestUsers, newsList,
+        user: currentUser, isAdmin, isEmployer, isUniversity,
+        adminStats, univStats,
+        pendingVacanciesList, latestUsers, newsList,
         goToProfile, getWelcomeMessage, timeOfDay, msgCount, vacancies, applications, myVacanciesCount,
         recommendedVacancies, showDetails, detailVisible, selectedVacancy, startFromDetail,
         showTestModal, testLoading, submitting, currentApplication, studentAnswers, coverLetter, testResult,
@@ -312,24 +463,36 @@ export default {
 </script>
 
 <style scoped>
-/* ИСПРАВЛЕННАЯ АНИМАЦИЯ */
-@keyframes float {
-  0% { transform: translateY(0px); }
-  50% { transform: translateY(-20px); }
-  100% { transform: translateY(0px); }
+/* ================================================================= */
+/* Стили для баннеров (ПЕРЕМЕЩЕНЫ ВНИЗ, ЧТОБЫ ПЕРЕКРЫВАТЬ СТАРЫЕ)    */
+/* ================================================================= */
+
+.welcome-banner { background: linear-gradient(120deg, #6366f1 0%, #8b5cf6 100%); border-radius: 24px; padding: 0 50px; height: 280px; color: white; display: flex; justify-content: space-between; align-items: center; position: relative; overflow: hidden; box-shadow: 0 20px 40px rgba(99, 102, 241, 0.25); }
+
+/* Баннеры для разных ролей (должны быть ниже базового класса!) */
+.employer-banner { background: linear-gradient(120deg, #2d3748 0%, #4a5568 100%) !important; box-shadow: 0 20px 40px rgba(45, 55, 72, 0.3) !important; }
+.admin-banner { background: linear-gradient(120deg, #1f2937 0%, #374151 100%) !important; box-shadow: 0 20px 40px rgba(0,0,0,0.4) !important; }
+
+/* 🔥 НОВЫЙ ЦВЕТ ДЛЯ ВУЗА (Royal Blue) */
+.university-banner {
+  background: linear-gradient(135deg, #0d9488 0%, #0891b2 100%) !important;
+  box-shadow: 0 20px 40px rgba(13, 148, 136, 0.3) !important;
 }
 
-/* Стили новостной модалки */
-.news-modal-content { overflow: hidden; border-radius: 12px; }
-.news-hero { height: 250px; background-size: cover; background-position: center; }
-.news-detail-body { padding: 30px; background: white; }
-.news-date-badge { background: #f3f4f6; padding: 6px 12px; border-radius: 20px; color: #6b7280; font-size: 0.85rem; display: inline-flex; align-items: center; gap: 6px; margin-bottom: 15px; }
-.news-detail-body h2 { font-size: 2rem; font-weight: 800; color: #1f2937; margin-bottom: 20px; line-height: 1.3; }
-.news-text-full { font-size: 1.05rem; line-height: 1.8; color: #4b5568; white-space: pre-line; margin-bottom: 30px; }
-.btn-close-news { background: #1f2937; color: white; border: none; padding: 12px 30px; border-radius: 10px; cursor: pointer; font-weight: 600; transition: 0.2s; display: block; margin: 0 auto; }
-.btn-close-news:hover { background: #111827; transform: translateY(-2px); }
+/* Бейджи */
+.greeting-badge { display: inline-flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.2); backdrop-filter: blur(5px); padding: 6px 14px; border-radius: 20px; font-size: 0.9rem; font-weight: 600; border: 1px solid rgba(255,255,255,0.1); }
+.admin-badge { background: rgba(255, 99, 71, 0.15); color: #ffccc7; border-color: rgba(255, 99, 71, 0.2); }
+.university-badge { background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.2); color: #dbeafe; }
 
-/* Остальные стили (Баннер, Грид и т.д.) скопированы из твоего файла... */
+.badges-row { display: flex; gap: 10px; margin-bottom: 15px; }
+.time-badge { background: rgba(255,255,255,0.1); backdrop-filter: blur(5px); padding: 6px 14px; border-radius: 20px; font-size: 0.9rem; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; border: 1px solid rgba(255,255,255,0.1); }
+
+/* Градиенты для иконок */
+.teal-gradient { background: linear-gradient(135deg, #2dd4bf, #0d9488); }
+.indigo-gradient { background: linear-gradient(135deg, #818cf8, #4f46e5); }
+.gold-gradient { background: linear-gradient(135deg, #fbbf24, #d97706); }
+
+/* Стандартные стили (как и были) */
 .page-wrapper { position: relative; width: 100%; min-height: 90vh; overflow-x: hidden; background: #f3f4f6; display: flex; justify-content: center; padding: 40px 20px; }
 .blobs-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; }
 .blob { position: absolute; border-radius: 50%; filter: blur(60px); opacity: 0.5; animation: float 10s infinite alternate; }
@@ -338,13 +501,8 @@ export default {
 .blob-3 { width: 250px; height: 250px; background: #ec4899; top: 30%; left: 40%; opacity: 0.3; animation-duration: 15s; }
 .content-container { position: relative; z-index: 1; width: 100%; max-width: 1100px; display: flex; flex-direction: column; gap: 30px; }
 .glass-card { background: rgba(255, 255, 255, 0.7); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.9); border-radius: 24px; box-shadow: 0 10px 40px rgba(0,0,0,0.05); transition: all 0.3s ease; }
-.welcome-banner { background: linear-gradient(120deg, #6366f1 0%, #8b5cf6 100%); border-radius: 24px; padding: 0 50px; height: 280px; color: white; display: flex; justify-content: space-between; align-items: center; position: relative; overflow: hidden; box-shadow: 0 20px 40px rgba(99, 102, 241, 0.25); }
-.employer-banner { background: linear-gradient(120deg, #2d3748 0%, #4a5568 100%); box-shadow: 0 20px 40px rgba(45, 55, 72, 0.3); }
-.admin-banner { background: linear-gradient(120deg, #1f2937 0%, #374151 100%); box-shadow: 0 20px 40px rgba(0,0,0,0.4); }
 .welcome-banner::before { content: ''; position: absolute; top: -50px; left: -50px; width: 200px; height: 200px; background: rgba(255,255,255,0.1); border-radius: 50%; filter: blur(40px); }
 .banner-content { position: relative; z-index: 2; max-width: 60%; }
-.greeting-badge { display: inline-flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.2); backdrop-filter: blur(5px); padding: 6px 14px; border-radius: 20px; font-size: 0.9rem; font-weight: 600; margin-bottom: 15px; border: 1px solid rgba(255,255,255,0.1); }
-.admin-badge { background: rgba(255, 99, 71, 0.15); color: #ffccc7; border-color: rgba(255, 99, 71, 0.2); }
 .dot-pulse { width: 8px; height: 8px; background: #4fd1c5; border-radius: 50%; animation: pulse-white 2s infinite; }
 .welcome-banner h1 { font-size: 2.5rem; font-weight: 800; margin-bottom: 10px; line-height: 1.2; }
 .subtitle { font-size: 1.1rem; opacity: 0.9; margin-bottom: 30px; font-weight: 300; }
@@ -353,7 +511,14 @@ export default {
 .stat-glass strong { font-size: 1.5rem; font-weight: 800; }
 .stat-glass span { font-size: 0.8rem; opacity: 0.9; text-transform: uppercase; }
 .banner-image-wrapper { width: 350px; height: 100%; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 20px; }
-.banner-img { max-height: 240px; max-width: 100%; filter: drop-shadow(0 20px 30px rgba(0,0,0,0.3)); transition: transform 0.3s; }
+.banner-img {
+  max-height: 260px; /* Чуть увеличим высоту */
+  max-width: 100%;
+  object-fit: contain; /* Чтобы картинка не обрезалась */
+  /* Убираем цветные тени, оставляем мягкую черную */
+  filter: drop-shadow(0 15px 30px rgba(0,0,0,0.2));
+  transition: transform 0.3s;
+}
 .floating { animation: float 6s ease-in-out infinite; }
 .dashboard-grid { display: grid; grid-template-columns: 1fr 320px; gap: 30px; }
 .section-title { font-size: 1.3rem; font-weight: 800; color: #1f2937; margin-bottom: 20px; display: flex; align-items: center; gap: 10px; }
@@ -377,6 +542,7 @@ export default {
 .news-list { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
 .news-card { overflow: hidden; display: flex; flex-direction: column; cursor: pointer; }
 .news-card:hover { transform: translateY(-5px); }
+.risk-alert { border: 1px solid #fee2e2; background: #fff5f5; }
 .news-img { height: 140px; background-size: cover; background-position: center; }
 .news-body { padding: 15px; }
 .news-body h4 { font-weight: 700; font-size: 1rem; margin: 0 0 5px; color: #1f2937; }

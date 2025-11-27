@@ -368,6 +368,44 @@ class ChatController {
             res.status(500).json({ message: "Error history" });
         }
     }
+
+    generateUniversityReport = async (req, res) => {
+        try {
+            // 1. Сначала собираем цифры из БД
+            const stats = await db.query(`
+                SELECT 
+                    (SELECT COUNT(*) FROM graduates) as total,
+                    (SELECT COUNT(*) FROM graduates WHERE status='employed') as employed,
+                    (SELECT AVG(salary) FROM graduates WHERE salary > 0) as salary
+            `);
+
+            const { total, employed, salary } = stats.rows[0];
+            const rate = total > 0 ? Math.round((employed / total) * 100) : 0;
+
+            // 2. Формируем промпт
+            const prompt = `
+                Ты аналитик данных в университете. 
+                Проанализируй показатели:
+                - Выпускников: ${total}
+                - Трудоустроено: ${employed} (${rate}%)
+                - Средняя ЗП: ${Math.round(salary || 0)} руб.
+                
+                Дай 3 совета декану (кратко, с эмодзи):
+                1. Оценка ситуации.
+                2. Что улучшить в обучении.
+                3. Совет студентам.
+            `;
+
+            // 3. Спрашиваем AI (используем твой aiService)
+            const aiResponse = await aiService.getCompletion([{ role: 'user', content: prompt }]);
+
+            res.json({ report: aiResponse });
+
+        } catch (e) {
+            console.error("University AI Error:", e);
+            res.status(500).json({ message: "Ошибка генерации отчета" });
+        }
+    }
 }
 
 module.exports = new ChatController();

@@ -16,7 +16,7 @@ class AuthController {
     async register(req, res) {
         try {
 
-            const { email, password, role, first_name, last_name, captchaToken } = req.body;
+            const { email, password, role, first_name, last_name, university_name, captchaToken } = req.body;
 
             // 2. Проверка Пароля
             const passError = validatePassword(password);
@@ -36,17 +36,23 @@ class AuthController {
             const activationToken = Math.random().toString(36).substring(2) + Date.now().toString(36);
 
             const newUser = await db.query(
-                'INSERT INTO users (email, password_hash, role, verification_token, is_verified) VALUES ($1, $2, $3, $4, $5) RETURNING id',
-                [email, passwordHash, role || 'graduate', activationToken, false]
+               'INSERT INTO users (email, password_hash, role, verification_token, is_verified) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+               [email, passwordHash, role || 'graduate', activationToken, false]
             );
 
             const userId = newUser.rows[0].id;
 
-            // !!! ИЗМЕНЕНИЕ: Сохраняем имя в зависимости от роли !!!
+            // !!! ОБНОВЛЕННАЯ ЛОГИКА СОХРАНЕНИЯ ПРОФИЛЕЙ !!!
             if (role === 'employer') {
                 await db.query(
                     'INSERT INTO recruiters (user_id, first_name, last_name) VALUES ($1, $2, $3)',
                     [userId, first_name, last_name]
+                );
+            } else if (role === 'university_staff') {
+                // СОХРАНЯЕМ ВУЗ И ИМЯ
+                await db.query(
+                    'INSERT INTO university_staff (user_id, full_name, university_name) VALUES ($1, $2, $3)',
+                    [userId, `${first_name} ${last_name}`, university_name]
                 );
             } else {
                 // По умолчанию graduate
@@ -96,7 +102,7 @@ class AuthController {
 
             const token = jwt.sign({ id: user.id, role: user.role }, process.env.JWT_SECRET || 'secret', { expiresIn: '24h' });
 
-            // !!! ИЗМЕНЕНИЕ: Получаем имя для РАЗНЫХ ролей !!!
+            // !!! ИЗМЕНЕНИЕ: Добавляем блок для university_staff !!!
             let firstName = null, lastName = null;
 
             if (user.role === 'graduate') {
@@ -105,6 +111,14 @@ class AuthController {
             } else if (user.role === 'employer') {
                 const pRes = await db.query('SELECT first_name, last_name FROM recruiters WHERE user_id = $1', [user.id]);
                 if (pRes.rows.length > 0) { firstName = pRes.rows[0].first_name; lastName = pRes.rows[0].last_name; }
+            } else if (user.role === 'university_staff') {
+                const pRes = await db.query('SELECT full_name FROM university_staff WHERE user_id = $1', [user.id]);
+                if (pRes.rows.length > 0) {
+                    // Так как там поле full_name, разобьем его (или вернем как есть)
+                    const names = pRes.rows[0].full_name.split(' ');
+                    firstName = names[0];
+                    lastName = names[1] || '';
+                }
             }
 
             res.json({ token, user: { id: user.id, email: user.email, role: user.role, first_name: firstName, last_name: lastName } });

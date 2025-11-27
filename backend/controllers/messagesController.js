@@ -32,30 +32,42 @@ class MessagesController {
                     lm.is_read as last_msg_read_status,
                     lm.sender_id as last_message_sender_id,
                     
-                    -- 🔥 ДОБАВЛЕНО: Считаем непрочитанные для КОНКРЕТНОГО диалога (партнер + вакансия)
+                    -- Считаем непрочитанные
                     (
                         SELECT COUNT(*)::int 
                         FROM direct_messages dm 
                         WHERE dm.sender_id = lm.partner_id 
                         AND dm.receiver_id = $1
                         AND dm.is_read = FALSE
-                        -- Важно: считаем только сообщения внутри ЭТОЙ вакансии (или общего чата, если null)
                         AND (dm.vacancy_id = lm.vacancy_id OR (dm.vacancy_id IS NULL AND lm.vacancy_id IS NULL))
                     ) as unread_count,
 
                     u.email,
                     u.role, 
-                    COALESCE(c.name, g.first_name || ' ' || g.last_name) as name,
+                    
+                    -- 🔥 ИСПРАВЛЕНО: Формирование имени (добавлен university_staff)
+                    COALESCE(
+                        c.name, 
+                        g.first_name || ' ' || g.last_name, 
+                        us.full_name,  -- Имя сотрудника вуза
+                        u.email        -- Фолбэк
+                    ) as name,
+
+                    -- 🔥 ИСПРАВЛЕНО: Аватарка (добавлен university_staff)
                     CASE 
                         WHEN u.role = 'graduate' THEN g.avatar_url
                         WHEN u.role = 'employer' THEN c.logo_url
-                        ELSE NULL 
+                        WHEN u.role = 'university_staff' THEN u.avatar_url -- Личное фото сотрудника лежит в users
+                        ELSE u.avatar_url 
                     END as avatar_url,
+                    
                     v.title as vacancy_title
+
                 FROM latest_msg lm
                 JOIN users u ON lm.partner_id = u.id
                 LEFT JOIN graduates g ON u.id = g.user_id
                 LEFT JOIN companies c ON u.id = c.user_id
+                LEFT JOIN university_staff us ON u.id = us.user_id -- 🔥 ДОБАВЛЕН JOIN
                 LEFT JOIN vacancies v ON lm.vacancy_id = v.id
                 ORDER BY lm.created_at DESC
             `;
@@ -68,7 +80,7 @@ class MessagesController {
         }
     }
 
-    // Получить переписку (ОСТАВЛЯЕМ КАК БЫЛО, НО С НЕБОЛЬШОЙ ПРАВКОЙ ДЛЯ БЕЗОПАСНОСТИ)
+    // Получить переписку
     async getMessages(req, res) {
         try {
             const userId = req.user.id;
@@ -79,22 +91,20 @@ class MessagesController {
                 return res.status(400).json({ message: 'Неверный ID собеседника' });
             }
 
-            // 1. Сначала отмечаем сообщения прочитанными (чтобы сразу обновить статус в БД)
+            // 1. Отмечаем прочитанными
             let updateQuery = `
                 UPDATE direct_messages SET is_read = TRUE 
                 WHERE sender_id = $1 AND receiver_id = $2 AND is_read = FALSE
             `;
             const updateParams = [partner_id, userId];
 
-            // Если чат привязан к вакансии, обновляем "прочитано" только в рамках этой вакансии
             if (vacancy_id && vacancy_id !== 'null' && vacancy_id !== 'undefined') {
                 updateQuery += ` AND vacancy_id = $3`;
                 updateParams.push(vacancy_id);
             }
             await db.query(updateQuery, updateParams);
 
-
-            // 2. Теперь забираем сообщения
+            // 2. Забираем сообщения
             let query = `
                 SELECT * FROM direct_messages 
                 WHERE ((sender_id = $1 AND receiver_id = $2) OR (sender_id = $2 AND receiver_id = $1))
@@ -116,7 +126,7 @@ class MessagesController {
         }
     }
 
-    // Отправить сообщение (БЕЗ ИЗМЕНЕНИЙ)
+    // Отправить сообщение
     async sendMessage(req, res) {
         try {
             const senderId = req.user.id;
@@ -134,7 +144,7 @@ class MessagesController {
         }
     }
 
-    // Общий счетчик (БЕЗ ИЗМЕНЕНИЙ)
+    // Общий счетчик
     async getUnreadCount(req, res) {
         try {
             const result = await db.query(

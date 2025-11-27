@@ -20,12 +20,12 @@
 
           <div class="chats-list custom-scroll">
             <div v-if="conversations.length === 0" class="empty-chats">
-              <span style="opacity: 0.6">Нет активных диалогов</span>
+              <span style="opacity: 0.6; padding: 20px; display:block; text-align: center;">Нет активных диалогов</span>
             </div>
 
             <div
               v-for="chat in conversations"
-              :key="chat.user_id + '_' + chat.vacancy_id"
+              :key="chat.user_id + '_' + (chat.vacancy_id || 'null')"
               class="chat-item"
               :class="{ active: activeChat && activeChat.user_id === chat.user_id && activeChat.vacancy_id === chat.vacancy_id }"
               @click="selectChat(chat)"
@@ -43,7 +43,7 @@
                     <span v-if="chat.role === 'admin'" class="admin-badge">🛡️ Admin</span>
                     <span v-else>{{ chat.name || chat.email }}</span>
                   </div>
-                  <div class="chat-time">{{ formatTime(chat.created_at) }}</div>
+                  <div class="chat-time">{{ chat.created_at ? formatTime(chat.created_at) : '' }}</div>
                 </div>
 
                 <div class="chat-vacancy-tag" v-if="chat.vacancy_title">
@@ -52,7 +52,7 @@
 
                 <div class="chat-bottom">
                   <div class="chat-preview">
-                    {{ stripMarkdown(chat.last_message) }}
+                    {{ chat.isNew ? 'Начните общение...' : stripMarkdown(chat.last_message) }}
                   </div>
                   <div v-if="chat.unread_count > 0" class="unread-badge">
                     {{ chat.unread_count }}
@@ -81,42 +81,46 @@
 
               <!-- КНОПКИ ДЕЙСТВИЙ -->
               <div class="header-actions">
-
-                <!-- 🔥 1. ПРОФИЛЬ (НОВОЕ) -->
-                <a-tooltip title="Информация о пользователе" placement="bottom">
+                <a-tooltip title="Профиль">
                   <button class="action-btn btn-gray" @click="openProfileModal">
                     <info-circle-outlined />
                   </button>
                 </a-tooltip>
 
-                <!-- 2. Сдать решение -->
-                <a-tooltip title="Отправить решение" placement="bottom">
-                  <button v-if="canSendSolution" class="action-btn btn-indigo" @click="showSolutionModal = true">
+                <a-tooltip title="Отправить решение" v-if="canSendSolution">
+                  <button class="action-btn btn-indigo" @click="showSolutionModal = true">
                     <paper-clip-outlined/>
                   </button>
                 </a-tooltip>
 
-                <!-- 3. Календарь -->
-                <a-tooltip title="Назначить интервью" placement="bottom">
-                  <button v-if="currentUser && currentUser.role === 'employer'" class="action-btn btn-emerald" @click="showCalendarModal = true">
+                <a-tooltip title="Назначить интервью" v-if="currentUser && currentUser.role === 'employer'">
+                  <button class="action-btn btn-emerald" @click="showCalendarModal = true">
                     <calendar-outlined/>
                   </button>
                 </a-tooltip>
 
-                <!-- 4. Видео -->
-                <a-tooltip title="Видеозвонок" placement="bottom">
-                  <button v-if="currentUser && currentUser.role !== 'admin'" class="action-btn btn-rose" @click="startVideoCall">
+                <a-tooltip title="Видеозвонок" v-if="currentUser && currentUser.role !== 'admin'">
+                  <button class="action-btn btn-rose" @click="startVideoCall">
                     <video-camera-outlined/>
                   </button>
                 </a-tooltip>
 
+                <!-- Кнопка закрытия (крестик) для удобства -->
+                <a-tooltip title="Закрыть чат (Esc)">
+                  <button class="action-btn btn-gray" @click="closeChat">
+                    <close-outlined />
+                  </button>
+                </a-tooltip>
               </div>
             </div>
 
             <!-- ОБЛАСТЬ СООБЩЕНИЙ -->
             <div class="messages-area custom-scroll" ref="messagesContainer">
               <div v-if="messages.length === 0" class="no-messages-placeholder">
-                Напишите первое сообщение...
+                <div style="text-align: center; margin-top: 20px;">
+                    <message-outlined style="font-size: 40px; color: #d1d5db; margin-bottom: 10px;" />
+                    <p style="color: #9ca3af">Напишите первое сообщение пользователю {{ activeChat.name }}</p>
+                </div>
               </div>
 
               <div v-for="(msg, index) in messages" :key="index"
@@ -175,13 +179,10 @@
       </div>
     </div>
 
-    <!-- === 🔥 МОДАЛКА ПРОФИЛЯ (НОВАЯ) === -->
+    <!-- === МОДАЛКА ПРОФИЛЯ === -->
     <a-modal v-model:open="showProfileModalState" :footer="null" width="500px" centered class="profile-modal">
       <div v-if="userProfile" class="profile-card-content">
-        <!-- Обложка -->
         <div class="profile-cover"></div>
-
-        <!-- Аватар и инфо -->
         <div class="profile-main-info">
           <div class="profile-avatar-large">
              <a-avatar :size="100" :src="getAvatarUrl(userProfile.avatar_url)"
@@ -195,10 +196,7 @@
              <environment-outlined /> {{ userProfile.city }}
           </div>
         </div>
-
         <a-divider style="margin: 15px 0" />
-
-        <!-- Навыки (если есть) -->
         <div v-if="userProfile.skills && userProfile.skills.length > 0" class="profile-section">
            <h4>Навыки</h4>
            <div class="skills-row">
@@ -206,15 +204,11 @@
               <span v-if="userProfile.skills.length > 5" class="skill-more">+{{ userProfile.skills.length - 5 }}</span>
            </div>
         </div>
-
-        <!-- О себе -->
         <div class="profile-section" v-if="userProfile.about_me">
            <h4>О себе</h4>
            <p class="bio-text">{{ userProfile.about_me }}</p>
         </div>
-
-        <!-- Кнопка перехода -->
-        <div class="profile-actions">
+        <div class="profile-actions" style="margin-top: 20px;">
            <a-button type="primary" block shape="round" size="large" @click="goToFullProfile">
               <idcard-outlined /> Открыть полный профиль
            </a-button>
@@ -257,7 +251,7 @@ import {
   VideoCameraOutlined, UploadOutlined, TagOutlined,
   PaperClipOutlined, WarningOutlined, EditOutlined,
   SafetyCertificateFilled, CheckOutlined, FileDoneOutlined, CalendarOutlined,
-  InfoCircleOutlined, IdcardOutlined, EnvironmentOutlined, LoadingOutlined // 🔥 Новые иконки
+  InfoCircleOutlined, IdcardOutlined, EnvironmentOutlined, LoadingOutlined, CloseOutlined
 } from '@ant-design/icons-vue';
 
 export default {
@@ -266,7 +260,7 @@ export default {
     VideoCameraOutlined, UploadOutlined, TagOutlined,
     PaperClipOutlined, WarningOutlined, EditOutlined,
     SafetyCertificateFilled, CheckOutlined, FileDoneOutlined, CalendarOutlined,
-    InfoCircleOutlined, IdcardOutlined, EnvironmentOutlined, LoadingOutlined
+    InfoCircleOutlined, IdcardOutlined, EnvironmentOutlined, LoadingOutlined, CloseOutlined
   },
   data() {
     return {
@@ -276,6 +270,7 @@ export default {
       messages: [],
       newMessage: '',
       pollingInterval: null,
+
       showSolutionModal: false,
       solutionDesc: '',
       fileList: [],
@@ -286,7 +281,7 @@ export default {
       interviewLink: '',
       solutionSubmittedLocal: false,
 
-      // 🔥 Данные для профиля
+      // Данные для профиля
       showProfileModalState: false,
       userProfile: null
     };
@@ -306,32 +301,103 @@ export default {
 
     await this.loadConversations();
 
+    const targetUserId = this.$route.query.userId;
+    if (targetUserId) {
+        await this.handleStartChat(targetUserId);
+    }
+
     this.pollingInterval = setInterval(() => {
-      if (this.activeChat) {
+      if (this.activeChat && !this.activeChat.isNew) {
         this.loadMessages(this.activeChat.user_id, this.activeChat.vacancy_id, false);
       }
       this.loadConversations();
     }, 3000);
+
+    // 🔥 ДОБАВЛЯЕМ СЛУШАТЕЛЬ ESC
+    window.addEventListener('keydown', this.handleKeydown);
   },
   beforeUnmount() {
     if (this.pollingInterval) clearInterval(this.pollingInterval);
+    // 🔥 УДАЛЯЕМ СЛУШАТЕЛЬ
+    window.removeEventListener('keydown', this.handleKeydown);
   },
   methods: {
+    // 🔥 ОБРАБОТКА НАЖАТИЯ ESC
+    handleKeydown(e) {
+      if (e.key === 'Escape') {
+        // Если открыта какая-либо модалка, Esc закроет её (Ant Design делает это сам),
+        // поэтому мы закрываем чат только если модалки ЗАКРЫТЫ.
+        const isModalOpen = this.showProfileModalState ||
+                            this.showSolutionModal ||
+                            this.showCalendarModal ||
+                            this.editingVacancyId;
+
+        if (this.activeChat && !isModalOpen) {
+          this.closeChat();
+        }
+      }
+    },
+
+    // Метод закрытия чата
+    closeChat() {
+      this.activeChat = null;
+      // Очищаем query параметры, если были
+      this.$router.replace({'query': null});
+    },
+
+    async handleStartChat(targetUserId) {
+       const existing = this.conversations.find(c => c.user_id == targetUserId);
+       if (existing) {
+           this.selectChat(existing);
+       } else {
+           try {
+               const res = await api.get(`/users/${targetUserId}/public-info`);
+               const user = res.data;
+               const newChat = {
+                   user_id: user.id,
+                   name: user.name,
+                   email: user.email,
+                   avatar_url: user.avatar_url,
+                   role: user.role,
+                   vacancy_id: null,
+                   isNew: true
+               };
+               this.conversations.unshift(newChat);
+               this.selectChat(newChat);
+           } catch (e) {
+               message.error("Не удалось начать диалог");
+           }
+       }
+    },
+
     async loadConversations() {
       try {
         const r = await api.get('/messages/conversations');
-        this.conversations = r.data;
+        if (this.activeChat && this.activeChat.isNew) {
+             const filtered = r.data.filter(c => c.user_id !== this.activeChat.user_id);
+             this.conversations = [this.activeChat, ...filtered];
+        } else {
+             this.conversations = r.data;
+        }
       } catch (e) {
         console.error(e);
       }
     },
+
     async selectChat(chat) {
-      chat.unread_count = 0;
       this.activeChat = chat;
       this.solutionSubmittedLocal = false;
-      await this.loadMessages(chat.user_id, chat.vacancy_id, true);
+
+      if (chat.isNew) {
+          this.messages = [];
+      } else {
+          chat.unread_count = 0;
+          await this.loadMessages(chat.user_id, chat.vacancy_id, true);
+      }
     },
+
     async loadMessages(partnerId, vacancyId, scroll = false) {
+      if (!partnerId) return;
       try {
         const r = await api.get(`/messages/${partnerId}`, {params: {vacancy_id: vacancyId}});
         if (JSON.stringify(r.data) !== JSON.stringify(this.messages)) {
@@ -342,70 +408,70 @@ export default {
         console.error(e);
       }
     },
+
     async sendMessage() {
       if (!this.newMessage.trim()) return;
       const text = this.newMessage;
       this.newMessage = '';
-      this.messages.push({sender_id: this.currentUser.id, content: text, created_at: new Date().toISOString()});
+
+      this.messages.push({
+          sender_id: this.currentUser.id,
+          content: text,
+          created_at: new Date().toISOString()
+      });
       this.scrollToBottom();
+
       try {
         await api.post('/messages/send', {
           receiver_id: this.activeChat.user_id,
           content: text,
-          vacancy_id: this.activeChat.vacancy_id
+          vacancy_id: this.activeChat.vacancy_id || null
         });
+
+        if (this.activeChat.isNew) {
+            this.activeChat.isNew = false;
+            this.$router.replace({'query': null});
+        }
         await this.loadConversations();
       } catch (e) {
-        console.error('Ошибка отправки');
+        message.error('Ошибка отправки');
       }
     },
-    // 🔥 НОВЫЙ МЕТОД: ОТКРЫТИЕ ПРОФИЛЯ
+
     async openProfileModal() {
         if(!this.activeChat) return;
         this.showProfileModalState = true;
-        this.userProfile = null; // Сброс перед загрузкой
-
+        this.userProfile = null;
         try {
-            // Попытка получить расширенные данные (если есть такой роут)
-            // Можно адаптировать под ваш API, например /users/:id/public
             const r = await api.get(`/users/${this.activeChat.user_id}/public-info`);
             this.userProfile = r.data;
         } catch (e) {
-            // Если API нет или ошибка, используем данные из чата как fallback
-            console.warn('Не удалось загрузить полный профиль, используем данные чата');
             this.userProfile = {
                 id: this.activeChat.user_id,
                 name: this.activeChat.name,
                 email: this.activeChat.email,
                 role: this.activeChat.role,
                 avatar_url: this.activeChat.avatar_url,
-                about_me: 'Информация недоступна или не заполнена.',
+                about_me: 'Нет данных',
                 skills: []
             };
         }
     },
+
     goToFullProfile() {
         if(!this.userProfile) return;
-        const id = this.userProfile.id || this.activeChat.user_id;
-        // Логика перехода зависит от роли. Предполагаем роут /profile/:id
-        this.$router.push(`/profile/${id}`);
+        this.$router.push(`/profile/${this.userProfile.id}`);
     },
+
     getRoleName(role) {
         if (role === 'graduate') return 'Студент';
         if (role === 'employer') return 'Рекрутер';
         if (role === 'admin') return 'Администратор';
         return 'Пользователь';
     },
-    openEditModal(id) {
-      this.editingVacancyId = id;
-    },
-    onVacancySaved() {
-      this.editingVacancyId = null;
-      message.success('Вакансия исправлена и отправлена на проверку!');
-    },
-    generateInternalLink() {
-      this.interviewLink = `${window.location.origin}/room/meet-${Date.now()}`;
-    },
+    openEditModal(id) { this.editingVacancyId = id; },
+    onVacancySaved() { this.editingVacancyId = null; message.success('Вакансия исправлена'); },
+    generateInternalLink() { this.interviewLink = `${window.location.origin}/room/meet-${Date.now()}`; },
     async scheduleInterview() {
       if (!this.interviewDate) return message.warning('Выберите дату');
       try {
@@ -419,9 +485,7 @@ export default {
         this.showCalendarModal = false;
         this.newMessage = `interview_invite|${this.interviewDate}|${this.interviewLink}`;
         this.sendMessage();
-      } catch (e) {
-        message.error('Ошибка');
-      }
+      } catch (e) { message.error('Ошибка'); }
     },
     async startVideoCall() {
       if (!this.activeChat) return;
@@ -436,15 +500,14 @@ export default {
         });
         this.scrollToBottom();
         this.$router.push(`/room/${roomId}`);
-      } catch (e) {
-      }
+      } catch (e) {}
     },
     stripMarkdown(text) {
       if (!text) return '';
       let clean = text.replace(/[*_`#]/g, '').replace(/\[(.*?)\]\(.*?\)/g, '$1')
           .replace(/video_call_invite\|.*/, '📹 Видеозвонок')
           .replace(/interview_invite\|.*/, '📅 Интервью');
-      if (clean.length > 35) return clean.substring(0, 35) + '...';
+      if (clean.length > 30) return clean.substring(0, 30) + '...';
       return clean;
     },
     formatMessage(text) {
@@ -509,300 +572,92 @@ export default {
 </script>
 
 <style scoped>
-/* --- ГЛОБАЛЬНЫЙ КОНТЕЙНЕР --- */
+/* Стили из твоего файла */
 .page-wrapper {
-  position: relative;
-  width: 100%;
-  height: calc(100vh - 40px);
-  background: #f0f2f5;
-  overflow: hidden;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-sizing: border-box;
+  position: relative; width: 100%; height: calc(100vh - 40px); background: #f0f2f5; overflow: hidden; display: flex; align-items: center; justify-content: center; box-sizing: border-box;
 }
-
-/* --- ФОНОВЫЕ БЛОБЫ --- */
-.blobs-container {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  z-index: 0;
-  pointer-events: none;
-}
-.blob {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(80px);
-  opacity: 0.4;
-  animation: float 20s infinite alternate ease-in-out;
-}
+.blobs-container { position: absolute; inset: 0; overflow: hidden; z-index: 0; pointer-events: none; }
+.blob { position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.4; animation: float 20s infinite alternate ease-in-out; }
 .blob-1 { width: 500px; height: 500px; background: #c4b5fd; top: -100px; left: -100px; }
 .blob-2 { width: 400px; height: 400px; background: #93c5fd; bottom: -100px; right: -100px; animation-delay: -5s; }
 .blob-3 { width: 300px; height: 300px; background: #f9a8d4; top: 30%; left: 40%; animation-delay: -10s; }
+@keyframes float { from { transform: translate(0, 0); } to { transform: translate(40px, -40px); } }
 
-@keyframes float {
-  from { transform: translate(0, 0); }
-  to { transform: translate(40px, -40px); }
-}
-
-/* --- КАРТОЧКА МЕССЕНДЖЕРА --- */
-.messenger-container {
-  position: relative;
-  z-index: 10;
-  width: 95%;
-  max-width: 1400px;
-  height: 90vh;
-}
-
-.messenger-layout {
-  display: flex;
-  width: 100%;
-  height: 100%;
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(20px);
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.5);
-  overflow: hidden;
-}
-
-/* --- SIDEBAR --- */
-.sidebar {
-  width: 350px;
-  border-right: 1px solid rgba(0,0,0,0.06);
-  display: flex;
-  flex-direction: column;
-  background: rgba(255,255,255,0.4);
-}
-
-.sidebar-header {
-  padding: 20px 24px;
-  border-bottom: 1px solid rgba(0,0,0,0.06);
-}
-.sidebar-header h3 { margin: 0; font-weight: 700; color: #1f2937; }
-
-.chats-list {
-  flex: 1;
-  overflow-y: auto;
-  padding: 12px;
-}
-
-.chat-item {
-  display: flex; gap: 12px; padding: 12px;
-  border-radius: 12px; cursor: pointer;
-  transition: 0.2s; margin-bottom: 4px;
-}
+.messenger-container { position: relative; z-index: 10; width: 95%; max-width: 1400px; height: 90vh; }
+.messenger-layout { display: flex; width: 100%; height: 100%; border-radius: 20px; background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(20px); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1); border: 1px solid rgba(255, 255, 255, 0.5); overflow: hidden; }
+.sidebar { width: 350px; border-right: 1px solid rgba(0,0,0,0.06); display: flex; flex-direction: column; background: rgba(255,255,255,0.4); }
+.sidebar-header { padding: 20px 24px; border-bottom: 1px solid rgba(0,0,0,0.06); }
+.chats-list { flex: 1; overflow-y: auto; padding: 12px; }
+.chat-item { display: flex; gap: 12px; padding: 12px; border-radius: 12px; cursor: pointer; transition: 0.2s; margin-bottom: 4px; }
 .chat-item:hover { background: rgba(0,0,0,0.04); }
 .chat-item.active { background: white; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
-
 .avatar-wrapper { position: relative; display: flex; align-items: center; }
-
 .chat-info { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
 .chat-top { display: flex; justify-content: space-between; margin-bottom: 2px; }
 .chat-name { font-weight: 600; font-size: 0.95rem; color: #374151; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 150px; }
 .chat-time { font-size: 0.75rem; color: #9ca3af; }
-.chat-vacancy-tag {
-  font-size: 0.7rem; color: #7c3aed; background: #f3e8ff;
-  padding: 1px 6px; border-radius: 4px; width: fit-content; margin-bottom: 4px;
-}
+.chat-vacancy-tag { font-size: 0.7rem; color: #7c3aed; background: #f3e8ff; padding: 1px 6px; border-radius: 4px; width: fit-content; margin-bottom: 4px; }
 .chat-bottom { display: flex; justify-content: space-between; align-items: center; }
 .chat-preview { font-size: 0.85rem; color: #6b7280; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; padding-right: 10px; }
-.unread-badge {
-  background: #ef4444; color: white; font-size: 0.7rem; font-weight: 700;
-  height: 18px; min-width: 18px; border-radius: 9px; display: flex; align-items: center; justify-content: center; padding: 0 5px;
-}
+.unread-badge { background: #ef4444; color: white; font-size: 0.7rem; font-weight: 700; height: 18px; min-width: 18px; border-radius: 9px; display: flex; align-items: center; justify-content: center; padding: 0 5px; }
 
-/* --- CHAT MAIN --- */
-.chat-main {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  background: rgba(255,255,255,0.2);
-  min-width: 0;
-}
-
-.chat-header {
-  height: 70px; padding: 0 24px;
-  display: flex; justify-content: space-between; align-items: center;
-  border-bottom: 1px solid rgba(0,0,0,0.06);
-  background: rgba(255,255,255,0.7);
-  z-index: 5;
-}
+.chat-main { flex: 1; display: flex; flex-direction: column; background: rgba(255,255,255,0.2); min-width: 0; }
+.chat-header { height: 70px; padding: 0 24px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(0,0,0,0.06); background: rgba(255,255,255,0.7); z-index: 5; }
 .header-title { font-weight: 700; font-size: 1.1rem; color: #1f2937; }
 .header-subtitle { font-size: 0.8rem; color: #6b7280; display: flex; align-items: center; gap: 4px; }
+.header-actions { display: flex; align-items: center; gap: 10px; }
+.action-btn { width: 38px; height: 38px; border-radius: 10px; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: 0.2s; }
+.btn-indigo { background: #eef2ff; color: #4f46e5; } .btn-indigo:hover { background: #e0e7ff; }
+.btn-rose { background: #fff1f2; color: #e11d48; } .btn-rose:hover { background: #ffe4e6; }
+.btn-emerald { background: #ecfdf5; color: #10b981; } .btn-emerald:hover { background: #d1fae5; }
+.btn-gray { background: #f3f4f6; color: #4b5563; } .btn-gray:hover { background: #e5e7eb; color: #1f2937; }
 
-/* КНОПКИ ДЕЙСТВИЙ - ВЫРАВНИВАНИЕ */
-.header-actions {
-  display: flex;
-  align-items: center; /* Центрируем по вертикали */
-  gap: 10px; /* Отступы между кнопками */
-}
+.messages-area { flex: 1; padding: 20px 30px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+.no-messages-placeholder { margin: auto; color: #9ca3af; font-size: 0.9rem; text-align: center; }
+.message-row { display: flex; width: 100%; animation: fadeInUp 0.3s ease-out forwards; }
+.row-me { justify-content: flex-end; } .row-them { justify-content: flex-start; }
+.message-bubble { max-width: 70%; padding: 12px 18px; border-radius: 18px; font-size: 0.95rem; line-height: 1.5; position: relative; word-wrap: break-word; }
+.row-them .message-bubble { background: #ffffff; border: 1px solid #e5e7eb; color: #1f2937; border-bottom-left-radius: 4px; box-shadow: 0 4px 6px rgba(0,0,0,0.02); }
+.row-me .message-bubble { background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; border-bottom-right-radius: 4px; box-shadow: 0 4px 10px rgba(37, 99, 235, 0.2); }
+.msg-meta { font-size: 0.7rem; margin-top: 4px; opacity: 0.7; display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
 
-.action-btn {
-  width: 38px; height: 38px; border-radius: 10px; border: none; cursor: pointer;
-  display: flex; align-items: center; justify-content: center; transition: 0.2s;
-}
-
-/* Цвета кнопок */
-.btn-indigo { background: #eef2ff; color: #4f46e5; }
-.btn-indigo:hover { background: #e0e7ff; }
-
-.btn-rose { background: #fff1f2; color: #e11d48; }
-.btn-rose:hover { background: #ffe4e6; }
-
-.btn-emerald { background: #ecfdf5; color: #10b981; }
-.btn-emerald:hover { background: #d1fae5; }
-
-/* 🔥 СЕРАЯ КНОПКА (ИНФО) */
-.btn-gray { background: #f3f4f6; color: #4b5563; }
-.btn-gray:hover { background: #e5e7eb; color: #1f2937; }
-
-
-/* --- MESSAGES AREA --- */
-.messages-area {
-  flex: 1;
-  padding: 20px 30px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.no-messages-placeholder {
-  margin: auto;
-  color: #9ca3af;
-  font-size: 0.9rem;
-}
-
-@keyframes fadeInUp {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.message-row {
-  display: flex;
-  width: 100%;
-  animation: fadeInUp 0.3s ease-out forwards;
-}
-.row-me { justify-content: flex-end; }
-.row-them { justify-content: flex-start; }
-
-.message-bubble {
-  max-width: 70%;
-  padding: 12px 18px;
-  border-radius: 18px;
-  font-size: 0.95rem;
-  line-height: 1.5;
-  position: relative;
-  word-wrap: break-word;
-}
-
-.row-them .message-bubble {
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
-  color: #1f2937;
-  border-bottom-left-radius: 4px;
-  box-shadow: 0 4px 6px rgba(0,0,0,0.02);
-}
-
-.row-me .message-bubble {
-  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-  color: white;
-  border-bottom-right-radius: 4px;
-  box-shadow: 0 4px 10px rgba(37, 99, 235, 0.2);
-}
-
-.msg-meta {
-  font-size: 0.7rem; margin-top: 4px; opacity: 0.7;
-  display: flex; align-items: center; justify-content: flex-end; gap: 4px;
-}
-.msg-content :deep(p) { margin: 0; }
-.msg-content :deep(a) { color: inherit; text-decoration: underline; }
-
-/* --- INPUT --- */
-.input-wrapper {
-  padding: 20px;
-  background: rgba(255,255,255,0.8);
-  border-top: 1px solid rgba(0,0,0,0.06);
-}
-.input-container {
-  display: flex; gap: 10px; align-items: flex-end;
-  background: white; padding: 8px; border-radius: 14px;
-  border: 1px solid #e5e7eb; box-shadow: 0 2px 10px rgba(0,0,0,0.03);
-}
+.input-wrapper { padding: 20px; background: rgba(255,255,255,0.8); border-top: 1px solid rgba(0,0,0,0.06); }
+.input-container { display: flex; gap: 10px; align-items: flex-end; background: white; padding: 8px; border-radius: 14px; border: 1px solid #e5e7eb; box-shadow: 0 2px 10px rgba(0,0,0,0.03); }
 .input-container:focus-within { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1); }
-
-.modern-textarea {
-  flex: 1; border: none !important; background: transparent !important;
-  box-shadow: none !important; resize: none; padding: 8px; font-size: 0.95rem;
-}
-.send-btn {
-  width: 40px; height: 40px; border-radius: 50%; background: #3b82f6;
-  color: white; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center;
-  transition: 0.2s; margin-bottom: 2px;
-}
+.modern-textarea { flex: 1; border: none !important; background: transparent !important; box-shadow: none !important; resize: none; padding: 8px; font-size: 0.95rem; }
+.send-btn { width: 40px; height: 40px; border-radius: 50%; background: #3b82f6; color: white; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: 0.2s; margin-bottom: 2px; }
 .send-btn:disabled { background: #e5e7eb; cursor: default; }
-.send-btn:not(:disabled):hover { transform: scale(1.05); background: #2563eb; }
 
-/* --- EMPTY STATE --- */
-.empty-state {
-  height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #9ca3af;
-}
-.empty-circle {
-  width: 80px; height: 80px; background: rgba(0,0,0,0.03); border-radius: 50%;
-  display: flex; align-items: center; justify-content: center; font-size: 2rem; margin-bottom: 20px;
-}
-
-/* SCROLLBAR */
+.empty-state { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #9ca3af; }
+.empty-circle { width: 80px; height: 80px; background: rgba(0,0,0,0.03); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 2rem; margin-bottom: 20px; }
 .custom-scroll::-webkit-scrollbar { width: 6px; }
 .custom-scroll::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 10px; }
 .custom-scroll::-webkit-scrollbar-track { background: transparent; }
 
 /* System cards */
-.system-card {
-  margin-top: 8px; background: #fff7ed; padding: 8px 12px; border-radius: 8px;
-  border: 1px solid #fed7aa; display: flex; gap: 10px; align-items: center; color: #9a3412;
-}
+.system-card { margin-top: 8px; background: #fff7ed; padding: 8px 12px; border-radius: 8px; border: 1px solid #fed7aa; display: flex; gap: 10px; align-items: center; color: #9a3412; }
 .sys-btn { background: #f97316; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 0.75rem; margin-top: 2px; }
 
 /* Video Cards */
-:deep(.video-call-card) {
-  background: rgba(255,255,255,0.9); padding: 10px; border-radius: 12px;
-  display: flex; gap: 10px; align-items: center; color: #374151; box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-}
-:deep(.video-icon-pulse) {
-  width: 40px; height: 40px; background: #fee2e2; color: #ef4444; border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-}
-:deep(.join-call-btn) {
-  background: #10b981; color: white; border: none; padding: 6px 12px;
-  border-radius: 6px; font-weight: 600; cursor: pointer; margin-top: 4px; display: inline-block; text-decoration: none;
-}
+:deep(.video-call-card) { background: rgba(255,255,255,0.9); padding: 10px; border-radius: 12px; display: flex; gap: 10px; align-items: center; color: #374151; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+:deep(.video-icon-pulse) { width: 40px; height: 40px; background: #fee2e2; color: #ef4444; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+:deep(.join-call-btn) { background: #10b981; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-weight: 600; cursor: pointer; margin-top: 4px; display: inline-block; text-decoration: none; }
 .date-input { width: 100%; padding: 8px; border: 1px solid #d1d5db; border-radius: 6px; }
 .mb-20 { margin-bottom: 20px; }
 
-/* 🔥 СТИЛИ ДЛЯ МОДАЛКИ ПРОФИЛЯ */
+/* Modal Profile Styles */
 .profile-card-content { text-align: center; margin-top: -20px; }
-.profile-cover {
-  height: 100px; background: linear-gradient(120deg, #a78bfa, #3b82f6);
-  margin: 0 -24px; border-radius: 0;
-}
+.profile-cover { height: 100px; background: linear-gradient(120deg, #a78bfa, #3b82f6); margin: 0 -24px; border-radius: 0; }
 .profile-main-info { margin-top: -50px; }
-.profile-avatar-large {
-  display: inline-block; padding: 4px; background: white; border-radius: 50%;
-}
+.profile-avatar-large { display: inline-block; padding: 4px; background: white; border-radius: 50%; }
 .profile-name { margin: 10px 0 5px; font-weight: 800; color: #1f2937; font-size: 1.5rem; }
 .profile-role { color: #6b7280; font-size: 0.9rem; margin-bottom: 5px; }
 .profile-location { color: #4b5563; font-size: 0.9rem; display: flex; align-items: center; justify-content: center; gap: 5px; }
-
 .profile-section { text-align: left; margin-bottom: 20px; }
 .profile-section h4 { font-size: 1rem; font-weight: 700; color: #1f2937; margin-bottom: 10px; }
 .bio-text { color: #4b5563; line-height: 1.6; font-size: 0.95rem; white-space: pre-line; }
-
 .skills-row { display: flex; flex-wrap: wrap; gap: 8px; }
 .skill-pill { background: #eff6ff; color: #2563eb; padding: 4px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: 600; }
 .skill-more { background: #f3f4f6; color: #6b7280; padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; }
-
 .loading-profile { text-align: center; padding: 40px; color: #6b7280; font-size: 1.1rem; }
 </style>

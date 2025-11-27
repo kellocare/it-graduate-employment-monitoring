@@ -19,6 +19,10 @@ import AdminReviews from './views/admin/AdminReviews.vue';
 import Roadmap from './views/Roadmap.vue';
 import AdminTables from './views/admin/AdminDataManager.vue';
 import PublicProfile from './views/PublicProfile.vue';
+const UniversityDashboard = () => import('./views/Dashboard.vue')
+const UniversityStudents = () => import('./views/Students.vue')
+const UniversityLayout = () => import('./components/UniversityLayout.vue')
+const UniversityReports = () => import('./views/ReportsCenter.vue');
 
 
 const routes = [
@@ -45,6 +49,25 @@ const routes = [
     props: true
     },
     {
+      path: '/university',
+      // Можно использовать Layout, если есть, или просто компонент
+      component: UniversityLayout,
+      meta: { requiresAuth: true, role: 'university_staff' },
+      children: [
+        {
+            path: 'dashboard',
+            name: 'UniversityDashboard',
+            component: UniversityDashboard
+        },
+        {
+            path: 'students',
+            name: 'UniversityStudents',
+            component: UniversityStudents
+        },
+        { path: 'reports', name: 'UniversityReports', component: UniversityReports }
+      ]
+    },
+    {
     path: '/admin',
     component: AdminLayout,
     meta: { requiresAuth: true, role: 'admin' },
@@ -64,5 +87,17 @@ const router = createRouter({
     history: createWebHistory(),
     routes
 });
+
+router.beforeEach((to, from, next) => {
+    const token = localStorage.getItem('token');
+    // Простая проверка (лучше декодировать токен и смотреть роль)
+    if (to.meta.requiresAuth && !token) {
+        next({ name: 'Login' });
+    } else {
+        // ТУТ ЖЕЛАТЕЛЬНО добавить проверку роли из токена (используй jwt-decode)
+        next();
+    }
+});
+
 
 export default router;
