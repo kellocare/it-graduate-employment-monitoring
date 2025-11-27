@@ -1,76 +1,262 @@
--- Создание типа данных для ролей пользователей
-CREATE TYPE user_role AS ENUM ('admin', 'graduate', 'employer', 'university_rep');
-
--- 1. Таблица пользователей (общая для всех)
-CREATE TABLE users (
-    id SERIAL PRIMARY KEY,
-    email VARCHAR(255) UNIQUE NOT NULL,
-    password_hash VARCHAR(255) NOT NULL,
-    role user_role NOT NULL DEFAULT 'graduate',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE "applications" (
+  "id" integer PRIMARY KEY NOT NULL,
+  "vacancy_id" integer,
+  "graduate_id" integer,
+  "status" varchar DEFAULT 'pending_test',
+  "test_tasks" jsonb,
+  "student_answers" jsonb,
+  "ai_feedback" text,
+  "ai_score" integer,
+  "created_at" timestamp DEFAULT now(),
+  "cover_letter" text,
+  "full_test_task" text,
+  "full_test_solution_url" varchar,
+  "final_verdict" text,
+  "hiring_status" varchar DEFAULT 'none'
 );
 
--- 2. Справочник направлений подготовки (например, 09.04.01)
-CREATE TABLE specialties (
-    id SERIAL PRIMARY KEY,
-    code VARCHAR(20) NOT NULL, -- код специальности
-    name VARCHAR(255) NOT NULL, -- название
-    description TEXT
+CREATE TABLE "audit_logs" (
+  "id" integer PRIMARY KEY NOT NULL,
+  "admin_id" integer,
+  "action" varchar NOT NULL,
+  "target_id" integer,
+  "details" text,
+  "ip_address" varchar,
+  "created_at" timestamp DEFAULT now()
 );
 
--- 3. Профессиональные стандарты
-CREATE TABLE prof_standards (
-    id SERIAL PRIMARY KEY,
-    code VARCHAR(50) NOT NULL,
-    name VARCHAR(255) NOT NULL
+CREATE TABLE "chat_messages" (
+  "id" integer PRIMARY KEY NOT NULL,
+  "user_id" integer,
+  "role" varchar NOT NULL,
+  "content" text NOT NULL,
+  "created_at" timestamp DEFAULT now(),
+  "sender_id" integer,
+  "receiver_id" integer,
+  "vacancy_id" integer,
+  "mode" varchar DEFAULT 'vacancy'
 );
 
--- 4. Профессиональные компетенции (связаны со стандартами)
-CREATE TABLE competencies (
-    id SERIAL PRIMARY KEY,
-    standard_id INTEGER REFERENCES prof_standards(id) ON DELETE CASCADE,
-    code VARCHAR(20) NOT NULL,
-    name VARCHAR(255) NOT NULL,
-    description TEXT
+CREATE TABLE "companies" (
+  "id" integer PRIMARY KEY NOT NULL,
+  "user_id" integer,
+  "name" varchar NOT NULL,
+  "inn" varchar,
+  "website" varchar,
+  "description" text,
+  "city" varchar,
+  "ai_score" integer DEFAULT 0,
+  "ai_summary" text,
+  "logo_url" varchar
 );
 
--- 5. Профиль выпускника (дополнительная информация к user)
-CREATE TABLE graduates (
-    id SERIAL PRIMARY KEY,
-    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-    specialty_id INTEGER REFERENCES specialties(id) ON DELETE SET NULL,
-    first_name VARCHAR(100) NOT NULL,
-    last_name VARCHAR(100) NOT NULL,
-    middle_name VARCHAR(100),
-    graduation_year INTEGER CHECK (graduation_year > 2000),
-    portfolio_link VARCHAR(255),
-    UNIQUE(user_id)
+CREATE TABLE "competencies" (
+  "id" integer PRIMARY KEY NOT NULL,
+  "standard_id" integer,
+  "code" varchar NOT NULL,
+  "name" varchar NOT NULL,
+  "description" text
 );
 
--- 6. Компании-работодатели
-CREATE TABLE companies (
-    id SERIAL PRIMARY KEY,
-    user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, -- привязка к аккаунту представителя
-    name VARCHAR(255) NOT NULL,
-    inn VARCHAR(12), -- ИНН для проверки
-    website VARCHAR(255),
-    description TEXT,
-    city VARCHAR(100)
+CREATE TABLE "direct_messages" (
+  "id" integer PRIMARY KEY NOT NULL,
+  "sender_id" integer,
+  "receiver_id" integer,
+  "content" text NOT NULL,
+  "is_read" boolean DEFAULT false,
+  "created_at" timestamp DEFAULT now(),
+  "vacancy_id" integer
 );
 
--- 7. Записи о трудоустройстве (Мониторинг)
-CREATE TABLE employment_records (
-    id SERIAL PRIMARY KEY,
-    graduate_id INTEGER REFERENCES graduates(id) ON DELETE CASCADE,
-    company_id INTEGER REFERENCES companies(id) ON DELETE SET NULL,
-    position_title VARCHAR(255) NOT NULL, -- Должность
-    start_date DATE NOT NULL,
-    end_date DATE, -- NULL, если работает по сей день
-    salary_amount DECIMAL(10, 2), -- Для анализа зарплат
-    is_current BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE "employment_records" (
+  "id" integer PRIMARY KEY NOT NULL,
+  "graduate_id" integer,
+  "company_id" integer,
+  "position_title" varchar NOT NULL,
+  "start_date" date NOT NULL,
+  "end_date" date,
+  "salary_amount" numeric,
+  "is_current" boolean DEFAULT true,
+  "created_at" timestamp DEFAULT now()
 );
 
--- Индексы для ускорения поиска
-CREATE INDEX idx_graduates_specialty ON graduates(specialty_id);
-CREATE INDEX idx_employment_company ON employment_records(company_id);
+CREATE TABLE "graduates" (
+  "id" integer PRIMARY KEY NOT NULL,
+  "user_id" integer,
+  "specialty_id" integer,
+  "first_name" varchar NOT NULL,
+  "last_name" varchar NOT NULL,
+  "middle_name" varchar,
+  "graduation_year" integer,
+  "avatar_url" varchar,
+  "about_me" text,
+  "phone" varchar,
+  "city" varchar,
+  "telegram" varchar,
+  "birth_date" date,
+  "portfolio_links" jsonb DEFAULT '[]'::jsonb,
+  "roadmap_data" jsonb
+);
+
+CREATE TABLE "interviews" (
+  "id" integer PRIMARY KEY NOT NULL,
+  "employer_id" integer,
+  "student_id" integer,
+  "vacancy_id" integer,
+  "scheduled_at" timestamp NOT NULL,
+  "meeting_link" varchar,
+  "status" varchar DEFAULT 'scheduled',
+  "created_at" timestamp DEFAULT now()
+);
+
+CREATE TABLE "invitations" (
+  "id" integer PRIMARY KEY NOT NULL,
+  "employer_user_id" integer,
+  "student_user_id" integer,
+  "status" varchar DEFAULT 'pending',
+  "created_at" timestamp DEFAULT now(),
+  "vacancy_id" integer
+);
+
+CREATE TABLE "news" (
+  "id" integer PRIMARY KEY NOT NULL,
+  "title" varchar NOT NULL,
+  "content" text,
+  "image_url" varchar,
+  "is_published" boolean DEFAULT true,
+  "created_at" timestamp DEFAULT now()
+);
+
+CREATE TABLE "notifications" (
+  "id" integer PRIMARY KEY NOT NULL,
+  "user_id" integer,
+  "sender_id" integer,
+  "title" varchar NOT NULL,
+  "message" text NOT NULL,
+  "type" varchar DEFAULT 'info',
+  "is_read" boolean DEFAULT false,
+  "created_at" timestamp DEFAULT now(),
+  "target_id" integer
+);
+
+CREATE TABLE "prof_standards" (
+  "id" integer PRIMARY KEY NOT NULL,
+  "code" varchar NOT NULL,
+  "name" varchar NOT NULL
+);
+
+CREATE TABLE "recruiters" (
+  "id" integer PRIMARY KEY NOT NULL,
+  "user_id" integer,
+  "first_name" varchar,
+  "last_name" varchar,
+  "phone" varchar,
+  "telegram" varchar,
+  "avatar_url" varchar,
+  "position" varchar
+);
+
+CREATE TABLE "resumes" (
+  "id" integer PRIMARY KEY NOT NULL,
+  "user_id" integer,
+  "filename" varchar NOT NULL,
+  "file_path" varchar NOT NULL,
+  "type" varchar DEFAULT 'pdf',
+  "created_at" timestamp DEFAULT now()
+);
+
+CREATE TABLE "reviews" (
+  "id" integer PRIMARY KEY NOT NULL,
+  "company_id" integer,
+  "student_id" integer,
+  "rating" integer NOT NULL,
+  "comment" text,
+  "status" varchar DEFAULT 'pending',
+  "created_at" timestamp DEFAULT now()
+);
+
+CREATE TABLE "roadmap_history" (
+  "id" integer PRIMARY KEY NOT NULL,
+  "user_id" integer,
+  "role_title" varchar,
+  "progress" integer,
+  "roadmap_data" jsonb,
+  "completed_at" timestamp DEFAULT now()
+);
+
+CREATE TABLE "skills" (
+  "id" integer PRIMARY KEY NOT NULL,
+  "name" varchar NOT NULL
+);
+
+CREATE TABLE "specialties" (
+  "id" integer PRIMARY KEY NOT NULL,
+  "code" varchar NOT NULL,
+  "name" varchar NOT NULL,
+  "description" text
+);
+
+CREATE TABLE "users" (
+  "id" integer PRIMARY KEY NOT NULL,
+  "email" varchar NOT NULL,
+  "password_hash" varchar,
+  "role" varchar NOT NULL DEFAULT 'graduate',
+  "created_at" timestamp DEFAULT now(),
+  "is_verified" boolean DEFAULT false,
+  "verification_token" varchar,
+  "google_id" varchar,
+  "github_id" varchar,
+  "last_seen" timestamp DEFAULT now()
+);
+
+CREATE TABLE "vacancies" (
+  "id" integer PRIMARY KEY NOT NULL,
+  "company_id" integer,
+  "title" varchar NOT NULL,
+  "description" text NOT NULL,
+  "salary_min" integer,
+  "salary_max" integer,
+  "contact_email" varchar,
+  "created_at" timestamp DEFAULT now(),
+  "ai_summary" text,
+  "status" varchar DEFAULT 'pending'
+);
+
+CREATE TABLE "vacancy_skills" (
+  "vacancy_id" integer,
+  "skill_id" integer
+);
+
+-- Остальные ALTER TABLE остаются без изменений
+ALTER TABLE "competencies" ADD FOREIGN KEY ("standard_id") REFERENCES "prof_standards" ("id");
+ALTER TABLE "graduates" ADD FOREIGN KEY ("user_id") REFERENCES "users" ("id");
+ALTER TABLE "graduates" ADD FOREIGN KEY ("specialty_id") REFERENCES "specialties" ("id");
+ALTER TABLE "companies" ADD FOREIGN KEY ("user_id") REFERENCES "users" ("id");
+ALTER TABLE "employment_records" ADD FOREIGN KEY ("graduate_id") REFERENCES "graduates" ("id");
+ALTER TABLE "employment_records" ADD FOREIGN KEY ("company_id") REFERENCES "companies" ("id");
+ALTER TABLE "vacancies" ADD FOREIGN KEY ("company_id") REFERENCES "companies" ("id");
+ALTER TABLE "vacancy_skills" ADD FOREIGN KEY ("vacancy_id") REFERENCES "vacancies" ("id");
+ALTER TABLE "vacancy_skills" ADD FOREIGN KEY ("skill_id") REFERENCES "skills" ("id");
+ALTER TABLE "applications" ADD FOREIGN KEY ("vacancy_id") REFERENCES "vacancies" ("id");
+ALTER TABLE "applications" ADD FOREIGN KEY ("graduate_id") REFERENCES "graduates" ("id");
+ALTER TABLE "chat_messages" ADD FOREIGN KEY ("user_id") REFERENCES "users" ("id");
+ALTER TABLE "notifications" ADD FOREIGN KEY ("user_id") REFERENCES "users" ("id");
+ALTER TABLE "notifications" ADD FOREIGN KEY ("sender_id") REFERENCES "users" ("id");
+ALTER TABLE "direct_messages" ADD FOREIGN KEY ("sender_id") REFERENCES "users" ("id");
+ALTER TABLE "direct_messages" ADD FOREIGN KEY ("receiver_id") REFERENCES "users" ("id");
+ALTER TABLE "invitations" ADD FOREIGN KEY ("employer_user_id") REFERENCES "users" ("id");
+ALTER TABLE "invitations" ADD FOREIGN KEY ("student_user_id") REFERENCES "users" ("id");
+ALTER TABLE "direct_messages" ADD FOREIGN KEY ("vacancy_id") REFERENCES "vacancies" ("id");
+ALTER TABLE "invitations" ADD FOREIGN KEY ("vacancy_id") REFERENCES "vacancies" ("id");
+ALTER TABLE "recruiters" ADD FOREIGN KEY ("user_id") REFERENCES "users" ("id");
+ALTER TABLE "audit_logs" ADD FOREIGN KEY ("admin_id") REFERENCES "users" ("id");
+ALTER TABLE "reviews" ADD FOREIGN KEY ("company_id") REFERENCES "companies" ("id");
+ALTER TABLE "reviews" ADD FOREIGN KEY ("student_id") REFERENCES "users" ("id");
+ALTER TABLE "resumes" ADD FOREIGN KEY ("user_id") REFERENCES "users" ("id");
+ALTER TABLE "roadmap_history" ADD FOREIGN KEY ("user_id") REFERENCES "users" ("id");
+ALTER TABLE "interviews" ADD FOREIGN KEY ("employer_id") REFERENCES "users" ("id");
+ALTER TABLE "interviews" ADD FOREIGN KEY ("student_id") REFERENCES "users" ("id");
+ALTER TABLE "interviews" ADD FOREIGN KEY ("vacancy_id") REFERENCES "vacancies" ("id");
+ALTER TABLE "chat_messages" ADD FOREIGN KEY ("sender_id") REFERENCES "users" ("id");
+ALTER TABLE "chat_messages" ADD FOREIGN KEY ("receiver_id") REFERENCES "users" ("id");
+ALTER TABLE "chat_messages" ADD FOREIGN KEY ("vacancy_id") REFERENCES "vacancies" ("id");
