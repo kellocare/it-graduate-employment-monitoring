@@ -53,6 +53,8 @@ class VacancyController {
             const vacancyData = newVacancy.rows[0];
             vacancyData.ai_summary = summary;
 
+            await auditService.log(req.user.id, 'VACANCY_CREATE', vacancyId, `Создана вакансия: ${title}`);
+
             res.json({ message: 'Вакансия создана и отправлена на модерацию', vacancy: vacancyData, ai_skills: savedSkills });
         } catch (e) {
             console.error(e);
@@ -101,6 +103,8 @@ class VacancyController {
             } else {
                 await db.query(`DELETE FROM vacancies WHERE id = $1 AND company_id = (SELECT id FROM companies WHERE user_id = $2)`, [vacancyId, userId]);
             }
+
+            await auditService.log(req.user.id, 'VACANCY_DELETE', vacancyId, `Удалена вакансия: ${title}`);
             res.json({ message: 'Вакансия удалена' });
         } catch (e) { res.status(500).json({ message: 'Ошибка удаления' }); }
     }
@@ -131,6 +135,8 @@ class VacancyController {
             if (result.rows.length === 0) {
                 return res.status(403).json({ message: 'Ошибка доступа или вакансия не найдена' });
             }
+
+            await auditService.log(req.user.id, 'VACANCY_UPDATE', vacancyId, `Обновлена вакансия: ${title}`);
 
             res.json(result.rows[0]);
         } catch (e) {

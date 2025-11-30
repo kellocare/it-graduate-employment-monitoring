@@ -1,0 +1,42 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="mainGradient" x1="0" y1="512" x2="512" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#4f46e5" /> <!-- Indigo -->
+      <stop offset="50%" stop-color="#8b5cf6" /> <!-- Violet -->
+      <stop offset="100%" stop-color="#ec4899" /> <!-- Pink -->
+    </linearGradient>
+
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="15" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Основная фигура: Абстрактный знак роста -->
+  <g filter="url(#glow)">
+    <!-- Левое крыло -->
+    <path
+      d="M120 380 C 120 380, 80 420, 160 420 C 220 420, 256 350, 256 256 C 256 160, 200 100, 150 100 C 100 100, 120 150, 120 150"
+      stroke="url(#mainGradient)"
+      stroke-width="45"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+
+    <!-- Правое крыло (Стрелка вверх) -->
+    <path
+      d="M392 150 L 392 380 C 392 380, 400 420, 320 420 C 240 420, 256 256, 256 256 L 392 120"
+      stroke="url(#mainGradient)"
+      stroke-width="45"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+
+    <!-- Центральный акцент (Точка данных) -->
+    <circle cx="256" cy="256" r="25" fill="white"/>
+    <circle cx="256" cy="256" r="12" fill="#8b5cf6"/>
+  </g>
+</svg>

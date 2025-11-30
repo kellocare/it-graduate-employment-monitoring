@@ -1,7 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import Login from './views/Login.vue';
-import Dashboard from './views/Dashboard.vue'; // Старый дашборд
-import Home from './views/Home.vue'; // <--- Новый лендинг
+import Dashboard from './views/Dashboard.vue';
+import Home from './views/Home.vue';
 import Profile from './views/Profile.vue';
 import Vacancies from './views/Vacancies.vue';
 import Chat from './views/Chat.vue';
@@ -19,68 +19,116 @@ import AdminReviews from './views/admin/AdminReviews.vue';
 import Roadmap from './views/Roadmap.vue';
 import AdminTables from './views/admin/AdminDataManager.vue';
 import PublicProfile from './views/PublicProfile.vue';
-const UniversityDashboard = () => import('./views/Dashboard.vue')
-const UniversityStudents = () => import('./views/Students.vue')
-const UniversityLayout = () => import('./components/UniversityLayout.vue')
+
+// Ленивая загрузка компонентов ВУЗа
+const UniversityDashboard = () => import('./views/Dashboard.vue');
+const UniversityStudents = () => import('./views/Students.vue');
+const UniversityLayout = () => import('./components/UniversityLayout.vue');
 const UniversityReports = () => import('./views/ReportsCenter.vue');
 
-
 const routes = [
-    { path: '/', component: Home }, // Главная теперь Home
-    { path: '/dashboard', component: Dashboard }, // Статистика теперь тут
-    { path: '/login', component: Login },
-    { path: '/profile', component: Profile },
-    { path: '/vacancies', component: Vacancies },
-    { path: '/chat', component: Chat },
-    { path: '/employer', component: EmployerDashboard },
-    { path: '/messages', component: Messages },
-    { path: '/room/:roomId', component: VideoRoom },
-    { path: '/top-companies', component: TopCompanies },
     {
-    path: '/roadmap',
-    name: 'Roadmap',
-    component: Roadmap,
-    meta: { requiresAuth: true }
+        path: '/',
+        component: Home,
+        meta: { title: 'Главная' }
     },
     {
-    path: '/profile/:id',
-    name: 'PublicProfile',
-    component: PublicProfile,
-    props: true
+        path: '/dashboard',
+        component: Dashboard,
+        meta: { title: 'Статистика' }
     },
     {
-      path: '/university',
-      // Можно использовать Layout, если есть, или просто компонент
-      component: UniversityLayout,
-      meta: { requiresAuth: true, role: 'university_staff' },
-      children: [
-        {
-            path: 'dashboard',
-            name: 'UniversityDashboard',
-            component: UniversityDashboard
-        },
-        {
-            path: 'students',
-            name: 'UniversityStudents',
-            component: UniversityStudents
-        },
-        { path: 'reports', name: 'UniversityReports', component: UniversityReports }
-      ]
+        path: '/login',
+        component: Login,
+        meta: { title: 'Вход' }
     },
     {
-    path: '/admin',
-    component: AdminLayout,
-    meta: { requiresAuth: true, role: 'admin' },
-    children: [
-      { path: '', component: AdminDashboard },
-      { path: 'vacancies', component: AdminVacancies },
-      { path: 'users', component: AdminUsers },
-      { path: 'news', component: AdminNews }, // <--- Новое
-      { path: 'logs', component: AdminLogs },  // <--- Новое
-      { path: 'reviews', component: AdminReviews },
-      { path: 'data', component: AdminTables }
-    ]
-  }
+        path: '/profile',
+        component: Profile,
+        meta: { title: 'Мой профиль', requiresAuth: true }
+    },
+    {
+        path: '/vacancies',
+        component: Vacancies,
+        meta: { title: 'Вакансии' }
+    },
+    {
+        path: '/chat',
+        component: Chat,
+        meta: { title: 'AI Ассистент', requiresAuth: true }
+    },
+    {
+        path: '/employer',
+        component: EmployerDashboard,
+        meta: { title: 'Кабинет работодателя', requiresAuth: true }
+    },
+    {
+        path: '/messages',
+        component: Messages,
+        meta: { title: 'Сообщения', requiresAuth: true }
+    },
+    {
+        path: '/room/:roomId',
+        component: VideoRoom,
+        meta: { title: 'Видеозвонок', requiresAuth: true }
+    },
+    {
+        path: '/top-companies',
+        component: TopCompanies,
+        meta: { title: 'Топ компаний' }
+    },
+    {
+        path: '/roadmap',
+        name: 'Roadmap',
+        component: Roadmap,
+        meta: { title: 'Карта развития', requiresAuth: true }
+    },
+    {
+        path: '/profile/:id',
+        name: 'PublicProfile',
+        component: PublicProfile,
+        props: true,
+        meta: { title: 'Профиль пользователя' }
+    },
+    {
+        path: '/university',
+        component: UniversityLayout,
+        meta: { requiresAuth: true, role: 'university_staff' },
+        children: [
+            {
+                path: 'dashboard',
+                name: 'UniversityDashboard',
+                component: UniversityDashboard,
+                meta: { title: 'Дашборд ВУЗа' }
+            },
+            {
+                path: 'students',
+                name: 'UniversityStudents',
+                component: UniversityStudents,
+                meta: { title: 'Студенты' }
+            },
+            {
+                path: 'reports',
+                name: 'UniversityReports',
+                component: UniversityReports,
+                meta: { title: 'Центр отчетов' }
+            }
+        ]
+    },
+    {
+        path: '/admin',
+        component: AdminLayout,
+        meta: { requiresAuth: true, role: 'admin' },
+        children: [
+            { path: '', component: AdminDashboard, meta: { title: 'Админ-панель' } },
+            { path: 'vacancies', component: AdminVacancies, meta: { title: 'Управление вакансиями' } },
+            { path: 'users', component: AdminUsers, meta: { title: 'Управление пользователями' } },
+            { path: 'news', component: AdminNews, meta: { title: 'Новости' } },
+            { path: 'logs', component: AdminLogs, meta: { title: 'Логи системы' } },
+            { path: 'reviews', component: AdminReviews, meta: { title: 'Отзывы' } },
+            { path: 'data', component: AdminTables, meta: { title: 'База данных' } }
+        ]
+    }
 ];
 
 const router = createRouter({
@@ -88,16 +136,20 @@ const router = createRouter({
     routes
 });
 
+// Глобальный хук для проверки авторизации и смены заголовка
 router.beforeEach((to, from, next) => {
+    // 1. Смена заголовка вкладки
+    const defaultTitle = 'IT Monitor';
+    document.title = to.meta.title ? `${to.meta.title} | ${defaultTitle}` : defaultTitle;
+
+    // 2. Проверка токена
     const token = localStorage.getItem('token');
-    // Простая проверка (лучше декодировать токен и смотреть роль)
     if (to.meta.requiresAuth && !token) {
         next({ name: 'Login' });
     } else {
-        // ТУТ ЖЕЛАТЕЛЬНО добавить проверку роли из токена (используй jwt-decode)
+        // Здесь можно добавить проверку ролей (decode token), если нужно строже
         next();
     }
 });
-
 
 export default router;

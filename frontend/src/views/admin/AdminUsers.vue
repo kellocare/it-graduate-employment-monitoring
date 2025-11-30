@@ -1,98 +1,135 @@
 <template>
+  <div class="content-container fade-in-up">
 
-  <div class="admin-layout">
+    <!-- HEADER & STATS -->
+    <div class="header-section">
+       <div class="header-title">
+          <h2><team-outlined class="icon-blue" /> База пользователей</h2>
+          <p>Управление учетными записями и правами доступа</p>
+       </div>
 
-
-    <div class="content-container fade-in-up">
-
-      <div class="page-controls">
-        <div class="left-controls">
-          <div class="search-wrap">
-            <input v-model="searchQuery" placeholder="Поиск..." class="glass-input" />
+       <div class="header-stats">
+          <div class="stat-card">
+             <div class="stat-val">{{ users.length }}</div>
+             <div class="stat-lbl">Всего</div>
           </div>
-          <div class="filters">
-             <select v-model="filterRole" class="glass-select">
-               <option value="all">Все роли</option>
-               <option value="graduate">Студенты</option>
-               <option value="employer">Работодатели</option>
-             </select>
+          <div class="stat-card">
+             <div class="stat-val text-green">+{{ newUsersCount }}</div>
+             <div class="stat-lbl">За 24ч</div>
           </div>
-        </div>
+          <div class="stat-card">
+             <div class="stat-val text-teal">{{ universityCount }}</div>
+             <div class="stat-lbl">ВУЗов</div>
+          </div>
+       </div>
+    </div>
 
-        <div class="right-controls">
-          <!-- КНОПКА ИМПОРТА (СИНЯЯ) -->
-          <button class="btn-import" @click="importModalVisible = true">
-            <upload-outlined />
-            <span>Импорт</span>
-          </button>
+    <!-- CONTROLS BAR -->
+    <div class="glass-panel controls-bar">
+      <div class="left-controls">
+        <a-input
+          v-model:value="searchQuery"
+          placeholder="Поиск по имени, email..."
+          class="search-input"
+          allow-clear
+        >
+           <template #prefix><search-outlined style="color: #9ca3af" /></template>
+        </a-input>
 
-          <!-- КНОПКА ЭКСПОРТА (ЗЕЛЕНАЯ) -->
-          <button class="btn-export" @click="downloadExcel" :disabled="exporting">
-            <file-excel-outlined v-if="!exporting" />
-            <loading-outlined v-else spin />
-            <span>{{ exporting ? '...' : 'Excel' }}</span>
-          </button>
+        <!-- ТАБЫ ФИЛЬТРАЦИИ -->
+        <div class="filter-tabs">
+           <div class="tab" :class="{ active: filterRole === 'all' }" @click="filterRole = 'all'">Все</div>
+           <div class="tab" :class="{ active: filterRole === 'graduate' }" @click="filterRole = 'graduate'">Студенты</div>
+           <div class="tab" :class="{ active: filterRole === 'employer' }" @click="filterRole = 'employer'">HR</div>
+           <div class="tab" :class="{ active: filterRole === 'university_staff' }" @click="filterRole = 'university_staff'">ВУЗ</div>
+           <div class="tab" :class="{ active: filterRole === 'admin' }" @click="filterRole = 'admin'">Админы</div>
         </div>
       </div>
 
-      <!-- Таблица -->
-      <div class="glass-table-wrapper">
-         <a-table :dataSource="filteredUsers" :columns="columns" rowKey="id" :pagination="{ pageSize: 7 }">
-            <template #bodyCell="{ column, record }">
-               <template v-if="column.key === 'user'">
-                  <div class="user-cell">
-                    <a-avatar :style="{ backgroundColor: stringToColor(record.name) }">{{ record.name?.[0]?.toUpperCase() || '?' }}</a-avatar>
-                    <div><div class="u-name">{{ record.name || 'Без имени' }}</div><div class="u-email">{{ record.email }}</div></div>
-                  </div>
-               </template>
-               <template v-if="column.key === 'role'">
-                  <span class="role-badge" :class="record.role">{{ getRoleName(record.role) }}</span>
-               </template>
-               <template v-if="column.key === 'action'">
-                  <a-popconfirm title="Удалить?" ok-text="Да" cancel-text="Нет" @confirm="deleteUser(record.id)">
-                     <button class="btn-del"><delete-outlined /></button>
-                  </a-popconfirm>
-               </template>
-            </template>
-         </a-table>
+      <div class="right-controls">
+        <button class="btn-action primary" @click="importModalVisible = true">
+          <cloud-upload-outlined /> Импорт
+        </button>
+
+        <button class="btn-action success" @click="downloadExcel" :disabled="exporting">
+          <loading-outlined v-if="exporting" spin />
+          <file-excel-outlined v-else /> Экспорт
+        </button>
       </div>
     </div>
 
-    <!-- МОДАЛЬНОЕ ОКНО ИМПОРТА -->
+    <!-- TABLE -->
+    <div class="glass-table-wrapper">
+       <a-table
+          :dataSource="filteredUsers"
+          :columns="columns"
+          rowKey="id"
+          :pagination="{ pageSize: 8 }"
+          class="custom-table"
+          :loading="loading"
+       >
+          <template #bodyCell="{ column, record }">
+
+             <!-- Пользователь -->
+             <template v-if="column.key === 'user'">
+                <div class="user-cell">
+                  <a-avatar
+                    size="large"
+                    :src="record.avatar_url ? `http://localhost:4000${record.avatar_url}` : null"
+                    :style="{ backgroundColor: stringToColor(record.email), fontSize: '18px' }"
+                  >
+                    {{ record.name?.[0]?.toUpperCase() || record.email[0].toUpperCase() }}
+                  </a-avatar>
+                  <div class="u-info">
+                      <div class="u-name">{{ record.name || 'Без имени' }}</div>
+                      <div class="u-email">{{ record.email }}</div>
+                  </div>
+                </div>
+             </template>
+
+             <!-- Роль (С КРАСИВОЙ ПОДСВЕТКОЙ) -->
+             <template v-if="column.key === 'role'">
+                <span class="role-badge" :class="record.role">
+                  <component :is="getRoleIcon(record.role)" />
+                  {{ getRoleName(record.role) }}
+                </span>
+             </template>
+
+             <!-- Статус -->
+             <template v-if="column.key === 'status'">
+                <a-badge :status="record.is_verified ? 'success' : 'default'" :text="record.is_verified ? 'Активен' : 'Не подтв.'" />
+             </template>
+
+             <!-- Дата -->
+             <template v-if="column.key === 'created'">
+                <span class="date-text">{{ new Date(record.created_at).toLocaleDateString() }}</span>
+             </template>
+
+             <!-- Действия -->
+             <template v-if="column.key === 'action'">
+                <div class="actions-row">
+                   <a-popconfirm title="Удалить пользователя?" ok-text="Да" cancel-text="Нет" @confirm="deleteUser(record.id)">
+                      <button class="btn-mini delete"><delete-outlined /></button>
+                   </a-popconfirm>
+                </div>
+             </template>
+
+          </template>
+       </a-table>
+    </div>
+
+    <!-- IMPORT MODAL -->
     <a-modal
-      v-model:visible="importModalVisible"
-      title="📥 Массовая регистрация студентов"
+      v-model:open="importModalVisible"
+      title="📥 Массовый импорт (Excel)"
       :footer="null"
       centered
+      width="500px"
     >
-      <div class="import-guide">
-        <p>Загрузите Excel файл (.xlsx) со списком студентов. Система автоматически создаст аккаунты.</p>
-
-        <div class="format-box">
-          <h4>Требуемый формат таблицы:</h4>
-          <table class="mini-table">
-            <thead><tr><th>A (Email)</th>
-              <th>B (Пароль)</th>
-              <th>C (Имя)</th>
-              <th>D (Фамилия)</th>
-            </tr>
-            </thead>
-            <tbody>
-            <tr>
-              <td>ivan@mail.ru</td>
-              <td>pass123</td>
-              <td>Иван</td>
-              <td>Иванов</td>
-            </tr>
-            <tr>
-              <td>anna@bk.ru</td>
-              <td>(пусто)*</td>
-              <td>Анна</td>
-              <td>Петрова</td>
-            </tr>
-            </tbody>
-          </table>
-          <small>* Если пароль пустой, будет установлен: <b>student123</b></small>
+      <div class="import-content">
+        <div class="info-alert">
+           <info-circle-outlined />
+           <span>Формат: Email, Пароль, Имя, Фамилия. <br>Пароль по умолчанию: <b>student123</b></span>
         </div>
 
         <div class="upload-area">
@@ -102,18 +139,16 @@
               :before-upload="beforeUpload"
               :show-upload-list="false"
           >
-            <p class="ant-upload-drag-icon">
-              <inbox-outlined/>
-            </p>
-            <p class="ant-upload-text" v-if="!fileToUpload">Нажмите или перетащите файл сюда</p>
-            <p class="ant-upload-text" v-else>Выбран файл: <b>{{ fileToUpload.name }}</b></p>
+            <p class="upload-icon"><inbox-outlined /></p>
+            <p class="upload-text" v-if="!fileToUpload">Нажмите или перетащите файл .xlsx</p>
+            <p class="upload-text active" v-else>Файл выбран: <b>{{ fileToUpload.name }}</b></p>
           </a-upload-dragger>
         </div>
 
-        <div class="import-actions">
-          <a-button @click="importModalVisible = false" style="margin-right: 10px">Отмена</a-button>
+        <div class="modal-footer-custom">
+          <a-button @click="importModalVisible = false">Отмена</a-button>
           <a-button type="primary" @click="uploadFile" :loading="importing" :disabled="!fileToUpload">
-            Загрузить и обработать
+            Загрузить
           </a-button>
         </div>
       </div>
@@ -124,58 +159,60 @@
 
 <script>
 import api from '../../axios';
-import {ref, computed, onMounted} from 'vue';
+import { ref, computed, onMounted } from 'vue';
+import { message } from 'ant-design-vue';
 import {
-  DeleteOutlined, FileExcelOutlined, LoadingOutlined, UploadOutlined, InboxOutlined
+  DeleteOutlined, FileExcelOutlined, LoadingOutlined, UploadOutlined, InboxOutlined,
+  TeamOutlined, SearchOutlined, CloudUploadOutlined, EditOutlined,
+  UserOutlined, BankOutlined, IdcardOutlined, SafetyCertificateFilled, InfoCircleOutlined
 } from '@ant-design/icons-vue';
-import {message} from 'ant-design-vue';
 
 export default {
   components: {
-    DeleteOutlined,
-    FileExcelOutlined,
-    LoadingOutlined,
-    UploadOutlined,
-    InboxOutlined
+    DeleteOutlined, FileExcelOutlined, LoadingOutlined, UploadOutlined, InboxOutlined,
+    TeamOutlined, SearchOutlined, CloudUploadOutlined, EditOutlined,
+    UserOutlined, BankOutlined, IdcardOutlined, SafetyCertificateFilled, InfoCircleOutlined
   },
   setup() {
     const users = ref([]);
+    const loading = ref(true);
     const searchQuery = ref('');
     const filterRole = ref('all');
 
     const exporting = ref(false);
-
-    // State для Импорта
     const importModalVisible = ref(false);
     const fileToUpload = ref(null);
     const importing = ref(false);
 
     const columns = [
-      {title: 'Пользователь', key: 'user'},
-      {title: 'Роль', key: 'role', width: 150},
-      {title: 'Действия', key: 'action', width: 100, align: 'center'}
+      { title: 'Пользователь', key: 'user', width: '35%' },
+      { title: 'Роль', key: 'role', width: '20%' },
+      { title: 'Статус', key: 'status', width: 150 },
+      { title: 'Регистрация', key: 'created', width: 150 },
+      { title: '', key: 'action', align: 'right' }
     ];
 
     const loadUsers = async () => {
+      loading.value = true;
       try {
         const r = await api.get('/admin/users');
         users.value = r.data;
-      } catch (e) {
-      }
+      } catch (e) { message.error('Ошибка загрузки'); }
+      finally { loading.value = false; }
     };
+
     const deleteUser = async (id) => {
       try {
         await api.delete(`/admin/users/${id}`);
         users.value = users.value.filter(u => u.id !== id);
-        message.success('Удалено');
-      } catch (e) {
-      }
+        message.success('Пользователь удален');
+      } catch (e) { message.error('Ошибка удаления'); }
     };
 
     const downloadExcel = async () => {
       exporting.value = true;
       try {
-        const response = await api.get('/admin/users/export', {responseType: 'blob'});
+        const response = await api.get('/admin/users/export', { responseType: 'blob' });
         const url = window.URL.createObjectURL(new Blob([response.data]));
         const link = document.createElement('a');
         link.href = url;
@@ -183,22 +220,16 @@ export default {
         document.body.appendChild(link);
         link.click();
         link.remove();
-      } catch (e) {
-        message.error('Ошибка скачивания');
-      } finally {
-        exporting.value = false;
-      }
+        message.success('Файл скачан');
+      } catch (e) { message.error('Ошибка экспорта'); }
+      finally { exporting.value = false; }
     };
 
-    // --- ЛОГИКА ИМПОРТА ---
     const beforeUpload = (file) => {
       const isExcel = file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-      if (!isExcel) {
-        message.error('Только файлы .xlsx');
-        return false;
-      }
+      if (!isExcel) { message.error('Только файлы .xlsx'); return false; }
       fileToUpload.value = file;
-      return false; // Предотвращаем авто-загрузку antd
+      return false;
     };
 
     const uploadFile = async () => {
@@ -208,28 +239,36 @@ export default {
       formData.append('file', fileToUpload.value);
 
       try {
-        const res = await api.post('/admin/users/import', formData, {
-          headers: {'Content-Type': 'multipart/form-data'}
-        });
+        const res = await api.post('/admin/users/import', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
         message.success(res.data.message);
         importModalVisible.value = false;
         fileToUpload.value = null;
-        loadUsers(); // Обновляем список
-      } catch (e) {
-        message.error('Ошибка импорта');
-      } finally {
-        importing.value = false;
-      }
+        loadUsers();
+      } catch (e) { message.error('Ошибка импорта'); }
+      finally { importing.value = false; }
     };
 
     const filteredUsers = computed(() => {
       let res = users.value;
       if (filterRole.value !== 'all') res = res.filter(u => u.role === filterRole.value);
-      if (searchQuery.value) res = res.filter(u => u.name?.toLowerCase().includes(searchQuery.value.toLowerCase()) || u.email.includes(searchQuery.value));
+      if (searchQuery.value) {
+          const q = searchQuery.value.toLowerCase();
+          res = res.filter(u => (u.name && u.name.toLowerCase().includes(q)) || u.email.toLowerCase().includes(q));
+      }
       return res;
     });
 
-    const getRoleName = (r) => ({'graduate': 'Студент', 'employer': 'Работодатель', 'admin': 'Админ'}[r] || r);
+    const newUsersCount = computed(() => {
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        return users.value.filter(u => new Date(u.created_at) > yesterday).length;
+    });
+
+    const universityCount = computed(() => users.value.filter(u => u.role === 'university_staff').length);
+
+    const getRoleName = (r) => ({ 'graduate': 'Студент', 'employer': 'HR', 'admin': 'Админ', 'university_staff': 'ВУЗ' }[r] || r);
+    const getRoleIcon = (r) => ({ 'graduate': 'IdcardOutlined', 'employer': 'BankOutlined', 'admin': 'SafetyCertificateFilled', 'university_staff': 'BankOutlined' }[r] || 'UserOutlined');
+
     const stringToColor = (str) => {
       if (!str) return '#ccc';
       let hash = 0;
@@ -240,9 +279,8 @@ export default {
     onMounted(loadUsers);
 
     return {
-      filteredUsers, columns, searchQuery, filterRole,
-      exporting, downloadExcel, deleteUser, getRoleName, stringToColor,
-      // Импорт
+      filteredUsers, columns, searchQuery, filterRole, users, newUsersCount, universityCount, loading,
+      exporting, downloadExcel, deleteUser, getRoleName, getRoleIcon, stringToColor,
       importModalVisible, fileToUpload, importing, beforeUpload, uploadFile
     };
   }
@@ -250,206 +288,68 @@ export default {
 </script>
 
 <style scoped>
-.admin-layout {
-  max-width: 1000px;
-  margin: 0 auto;
-  padding: 20px;
-  position: relative;
-  z-index: 1;
-}
+.content-container { max-width: 1200px; margin: 0 auto; }
 
-.page-controls {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-  flex-wrap: wrap;
-  gap: 15px;
-}
+/* HEADER */
+.header-section { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 30px; }
+.header-title h2 { margin: 0; font-size: 1.8rem; font-weight: 800; color: #1f2937; display: flex; align-items: center; gap: 12px; }
+.header-title p { margin: 5px 0 0; color: #6b7280; font-size: 0.95rem; }
+.icon-blue { color: #3b82f6; }
 
-.left-controls, .right-controls {
-  display: flex;
-  gap: 10px;
-  flex: 1;
-}
+.header-stats { display: flex; gap: 15px; }
+.stat-card { background: white; padding: 10px 20px; border-radius: 12px; border: 1px solid #e5e7eb; text-align: center; box-shadow: 0 4px 10px rgba(0,0,0,0.02); min-width: 100px; }
+.stat-val { font-weight: 800; font-size: 1.5rem; color: #111827; line-height: 1; }
+.stat-val.text-green { color: #10b981; }
+.stat-val.text-teal { color: #0d9488; }
+.stat-lbl { font-size: 0.75rem; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px; }
 
-.right-controls {
-  justify-content: flex-end;
-}
+/* CONTROLS */
+.controls-bar { display: flex; justify-content: space-between; align-items: center; padding: 15px 20px; margin-bottom: 25px; background: rgba(255,255,255,0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.5); border-radius: 16px; }
+.left-controls { display: flex; align-items: center; gap: 20px; flex: 1; }
+.search-input { width: 280px; border-radius: 8px; box-shadow: none; border: 1px solid #e5e7eb; }
+.filter-tabs { display: flex; background: #f1f5f9; padding: 4px; border-radius: 10px; gap: 4px; }
+.tab { padding: 6px 16px; border-radius: 8px; font-size: 0.9rem; font-weight: 600; color: #64748b; cursor: pointer; transition: 0.2s; }
+.tab:hover { background: rgba(0,0,0,0.05); }
+.tab.active { background: white; color: #3b82f6; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
 
-.glass-input, .glass-select {
-  background: rgba(255, 255, 255, 0.7);
-  border: 1px solid #fff;
-  padding: 10px 15px;
-  border-radius: 12px;
-  width: 100%;
-  outline: none;
-  transition: 0.3s;
-  max-width: 250px;
-}
+.right-controls { display: flex; gap: 10px; }
+.btn-action { display: flex; align-items: center; gap: 8px; border: none; padding: 0 16px; border-radius: 10px; font-weight: 600; cursor: pointer; transition: 0.3s; height: 40px; color: white; font-size: 0.9rem; }
+.btn-action.primary { background: #3b82f6; box-shadow: 0 4px 10px rgba(59, 130, 246, 0.3); }
+.btn-action.primary:hover { background: #2563eb; transform: translateY(-2px); }
+.btn-action.success { background: #10b981; box-shadow: 0 4px 10px rgba(16, 185, 129, 0.3); }
+.btn-action.success:hover { background: #059669; transform: translateY(-2px); }
 
-.glass-input:focus {
-  background: #fff;
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
-}
+/* TABLE */
+.glass-table-wrapper { background: rgba(255,255,255,0.8); backdrop-filter: blur(10px); border-radius: 20px; padding: 0; border: 1px solid rgba(255,255,255,0.6); overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.02); }
+.custom-table :deep(.ant-table-thead > tr > th) { background: #f8fafc; font-weight: 700; color: #4b5563; font-size: 0.85rem; }
+.user-cell { display: flex; gap: 12px; align-items: center; }
+.u-name { font-weight: 600; color: #1f2937; font-size: 0.95rem; }
+.u-email { font-size: 0.8rem; color: #6b7280; }
+.date-text { color: #6b7280; font-size: 0.85rem; }
 
-/* Кнопки */
-.btn-export, .btn-import {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  border: none;
-  padding: 0 20px;
-  border-radius: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: 0.3s;
-  height: 42px;
-  color: white;
-}
+/* BADGES */
+.role-badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; }
+.role-badge.graduate { background: #e0f2fe; color: #0284c7; border: 1px solid #bae6fd; }
+.role-badge.employer { background: #f3e8ff; color: #7c3aed; border: 1px solid #d8b4fe; }
+.role-badge.university_staff { background: #ccfbf1; color: #0f766e; border: 1px solid #99f6e4; } /* TEAL */
+.role-badge.admin { background: #fee2e2; color: #dc2626; border: 1px solid #fecaca; }
 
-.btn-export {
-  background: #107c41;
-  box-shadow: 0 4px 10px rgba(16, 124, 65, 0.3);
-}
+.actions-row { display: flex; gap: 8px; justify-content: flex-end; }
+.btn-mini { width: 32px; height: 32px; border-radius: 8px; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: 0.2s; }
+.btn-mini.edit { background: #f3f4f6; color: #4b5563; }
+.btn-mini.edit:hover { background: #e5e7eb; color: #1f2937; }
+.btn-mini.delete { background: #fff1f2; color: #f43f5e; }
+.btn-mini.delete:hover { background: #f43f5e; color: white; }
 
-.btn-export:hover {
-  background: #0c5e31;
-  transform: translateY(-2px);
-}
+/* MODAL */
+.info-alert { background: #eff6ff; color: #1e40af; padding: 12px; border-radius: 8px; font-size: 0.9rem; display: flex; gap: 10px; align-items: center; margin-bottom: 20px; border: 1px solid #dbeafe; }
+.upload-area { border: 2px dashed #d1d5db; border-radius: 12px; padding: 30px; text-align: center; background: #f9fafb; transition: 0.2s; }
+.upload-area:hover { border-color: #3b82f6; background: #eff6ff; }
+.upload-icon { font-size: 2.5rem; color: #9ca3af; margin-bottom: 10px; }
+.upload-text { color: #6b7280; }
+.upload-text.active { color: #3b82f6; font-weight: 600; }
+.modal-footer-custom { display: flex; justify-content: flex-end; gap: 10px; margin-top: 25px; }
 
-.btn-import {
-  background: #3b82f6;
-  box-shadow: 0 4px 10px rgba(59, 130, 246, 0.3);
-}
-
-.btn-import:hover {
-  background: #2563eb;
-  transform: translateY(-2px);
-}
-
-.glass-table-wrapper {
-  background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(15px);
-  border-radius: 20px;
-  padding: 20px;
-  border: 1px solid #fff;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
-}
-
-.user-cell {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-}
-
-.u-name {
-  font-weight: 600;
-  color: #1f2937;
-}
-
-.u-email {
-  font-size: 0.8rem;
-  color: #6b7280;
-}
-
-.role-badge {
-  padding: 4px 12px;
-  border-radius: 20px;
-  font-size: 0.8rem;
-  font-weight: 700;
-}
-
-.role-badge.graduate {
-  background: #e0f2fe;
-  color: #0284c7;
-}
-
-.role-badge.employer {
-  background: #f3e8ff;
-  color: #7c3aed;
-}
-
-.role-badge.admin {
-  background: #fee2e2;
-  color: #dc2626;
-}
-
-.btn-del {
-  border: none;
-  background: #fee2e2;
-  color: #ef4444;
-  border-radius: 8px;
-  width: 32px;
-  height: 32px;
-  cursor: pointer;
-  transition: 0.2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.btn-del:hover {
-  background: #ef4444;
-  color: white;
-  transform: scale(1.1);
-}
-
-.fade-in-up {
-  animation: fadeInUp 0.8s ease forwards;
-  opacity: 0;
-  transform: translateY(30px);
-}
-
-@keyframes fadeInUp {
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* Modal Styles */
-.import-guide {
-  font-size: 0.95rem;
-  color: #4b5563;
-}
-
-.format-box {
-  background: #f9fafb;
-  padding: 15px;
-  border-radius: 10px;
-  margin: 15px 0;
-  border: 1px solid #e5e7eb;
-}
-
-.format-box h4 {
-  margin: 0 0 10px 0;
-  font-size: 0.9rem;
-}
-
-.mini-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.85rem;
-}
-
-.mini-table th, .mini-table td {
-  border: 1px solid #d1d5db;
-  padding: 6px;
-  text-align: left;
-}
-
-.mini-table th {
-  background: #e5e7eb;
-}
-
-.upload-area {
-  margin: 20px 0;
-}
-
-.import-actions {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 20px;
-}
+.fade-in-up { animation: fadeInUp 0.8s ease forwards; opacity: 0; transform: translateY(30px); }
+@keyframes fadeInUp { to { opacity: 1; transform: translateY(0); } }
 </style>

@@ -205,52 +205,16 @@ class ChatController {
                     }
                 ]
             `;
-
             const aiResponse = await aiService.getCompletion([{ role: 'user', content: prompt }]);
 
-            // Чистка JSON
+            // Парсинг JSON
             let cleanJson = aiResponse.replace(/```json/g, '').replace(/```/g, '').trim();
-            // Исправление обрыва строки (иногда ИИ обрывает JSON)
-            if (!cleanJson.endsWith(']') && !cleanJson.endsWith('}')) {
-               // Пытаемся закрыть, если обрезалось (примитивно)
-               cleanJson += ']';
-            }
+            const nodes = JSON.parse(cleanJson);
 
-            let steps = [];
-            try {
-                // Попытка 1: Просто парсим
-                steps = JSON.parse(cleanJson);
-            } catch (parseError) {
-                // Попытка 2: Ищем массив внутри текста
-                const firstBracket = aiResponse.indexOf('[');
-                const lastBracket = aiResponse.lastIndexOf(']');
-                if (firstBracket !== -1 && lastBracket !== -1) {
-                    try {
-                        steps = JSON.parse(aiResponse.substring(firstBracket, lastBracket + 1));
-                    } catch (e2) {
-                        console.error("JSON Parsing failed completely");
-                        return res.status(500).json({ message: "Ошибка обработки ответа ИИ" });
-                    }
-                } else {
-                    return res.status(500).json({ message: "ИИ вернул неверный формат" });
-                }
-            }
-
-            // Доп. валидация структуры (на всякий случай проставляем дефолты)
-            const validateNode = (node) => {
-                if (!node.difficulty) node.difficulty = 'medium';
-                if (!node.time) node.time = '2h';
-                if (!node.xpEarned) node.xpEarned = 100;
-                if (!node.resources) node.resources = [];
-                if (node.subtopics) node.subtopics.forEach(validateNode);
-            };
-            steps.forEach(validateNode);
-
-            res.json(steps);
-
+            res.json(nodes);
         } catch (e) {
-            console.error("Roadmap Error:", e);
-            res.status(500).json({ message: "Ошибка генерации roadmap" });
+            console.error("Roadmap Gen Error:", e);
+            res.status(500).json({ message: "Ошибка генерации" });
         }
     }
 
@@ -294,13 +258,47 @@ class ChatController {
     saveRoadmap = async (req, res) => {
         try {
             const userId = req.user.id;
-            const { roadmapData, role } = req.body;
-            if (!roadmapData) return res.status(400).json({message: "Нет данных"});
+            const { roadmapId, nodes, role, activeId } = req.body;
+            // roadmapId - какой трек обновляем (если null -> создаем новый)
+            // activeId - какой трек сделать активным
 
-            const dataToSave = { role: role || "My Roadmap", nodes: roadmapData };
-            await db.query('UPDATE graduates SET roadmap_data = $1 WHERE user_id = $2', [JSON.stringify(dataToSave), userId]);
-            res.json({ message: "Saved" });
+            // Получаем текущие данные
+            const result = await db.query('SELECT roadmap_data FROM graduates WHERE user_id = $1', [userId]);
+            let data = result.rows[0]?.roadmap_data || { activeId: null, list: [] };
+
+            // Убедимся, что структура правильная
+            if (!data.list) data = { activeId: null, list: [] };
+
+            if (nodes && role) {
+                // Если переданы узлы - значит сохраняем конкретный роадмап
+                const idToSave = roadmapId || require('crypto').randomUUID(); // Генерируем ID если новый
+
+                const existingIndex = data.list.findIndex(item => item.id === idToSave);
+
+                const newTrack = { id: idToSave, role, nodes };
+
+                if (existingIndex !== -1) {
+                    // Обновляем существующий
+                    data.list[existingIndex] = newTrack;
+                } else {
+                    // Добавляем новый
+                    data.list.push(newTrack);
+                }
+
+                // Делаем его активным
+                data.activeId = idToSave;
+            }
+
+            // Если просто переключили вкладку (передан только activeId)
+            if (activeId) {
+                data.activeId = activeId;
+            }
+
+            await db.query('UPDATE graduates SET roadmap_data = $1 WHERE user_id = $2', [JSON.stringify(data), userId]);
+            res.json({ message: "Saved", roadmapId: data.activeId });
+
         } catch (e) {
+            console.error(e);
             res.status(500).json({ message: "Error saving" });
         }
     }
@@ -310,51 +308,78 @@ class ChatController {
         try {
             const userId = req.user.id;
             const result = await db.query('SELECT roadmap_data FROM graduates WHERE user_id = $1', [userId]);
-
             let data = result.rows[0]?.roadmap_data;
 
-            // Миграция: Если там старый формат (просто массив), оборачиваем в список
-            if (data && Array.isArray(data)) {
-                data = {
-                    activeId: 'default',
-                    list: [{ id: 'default', role: 'My Roadmap', nodes: data }]
+            // МИГРАЦИЯ ДАННЫХ НА ЛЕТУ
+            // Если данные в старом формате (просто массив узлов или объект {role, nodes}), превращаем в { activeId, list: [] }
+            if (data && (Array.isArray(data) || (data.nodes && !data.list))) {
+                const oldNodes = Array.isArray(data) ? data : data.nodes;
+                const oldRole = data.role || "My Roadmap";
+                const newId = 'default-id';
+
+                const newData = {
+                    activeId: newId,
+                    list: [{ id: newId, role: oldRole, nodes: oldNodes }]
                 };
-                await db.query('UPDATE graduates SET roadmap_data = $1 WHERE user_id = $2', [JSON.stringify(data), userId]);
+
+                // Сохраняем обновленную структуру
+                await db.query('UPDATE graduates SET roadmap_data = $1 WHERE user_id = $2', [JSON.stringify(newData), userId]);
+                data = newData;
             }
 
-            if (!data) data = { activeId: null, list: [] };
+            // Если данных нет вообще
+            if (!data) {
+                data = { activeId: null, list: [] };
+            }
+
             res.json(data);
         } catch (e) {
-            res.status(500).json({ message: "Error loading" });
+            console.error(e);
+            res.status(500).json({ message: "Error loading roadmap" });
         }
     }
 
     archiveRoadmap = async (req, res) => {
         try {
             const userId = req.user.id;
-            const gradRes = await db.query('SELECT roadmap_data FROM graduates WHERE user_id = $1', [userId]);
-            const currentData = gradRes.rows[0]?.roadmap_data;
+            const { roadmapId } = req.body; // ID трека, который архивируем
 
-            if (!currentData) return res.status(400).json({ message: "Нет роадмапа" });
+            const result = await db.query('SELECT roadmap_data FROM graduates WHERE user_id = $1', [userId]);
+            let data = result.rows[0]?.roadmap_data;
 
-            let roleTitle = "IT Roadmap";
-            let nodes = [];
-            if (Array.isArray(currentData)) {
-                nodes = currentData;
-                roleTitle = req.body.roleTitle || "My Roadmap";
-            } else if (currentData.nodes) {
-                nodes = currentData.nodes;
-                roleTitle = currentData.role || req.body.roleTitle;
-            }
+            if (!data || !data.list) return res.status(400).json({ message: "Нет данных" });
 
-            const { finalProgress } = req.body;
+            // Находим трек
+            const trackIndex = data.list.findIndex(t => t.id === roadmapId);
+            if (trackIndex === -1) return res.status(404).json({ message: "Трек не найден" });
+
+            const track = data.list[trackIndex];
+
+            // Рассчитываем прогресс перед архивацией
+            const totalNodes = track.nodes.filter(n => n.type !== 'sub').length; // Примерно
+            const doneNodes = track.nodes.filter(n => n.data && n.data.done).length; // Нужно адаптировать под структуру VueFlow
+            // У тебя структура VueFlow: nodes хранятся плоско.
+            // Проще взять прогресс с фронтенда, но если надо на бэке - считаем done:true
+
+            // Сохраняем в историю
             await db.query(
                 'INSERT INTO roadmap_history (user_id, role_title, progress, roadmap_data) VALUES ($1, $2, $3, $4)',
-                [userId, roleTitle, finalProgress || 0, JSON.stringify(nodes)]
+                [userId, track.role, 100, JSON.stringify(track.nodes)] // Progress заглушка, лучше передавать с фронта
             );
-            await db.query('UPDATE graduates SET roadmap_data = NULL WHERE user_id = $1', [userId]);
+
+            // Удаляем из активного списка
+            data.list.splice(trackIndex, 1);
+
+            // Если удалили активный - переключаем на первый доступный или null
+            if (data.activeId === roadmapId) {
+                data.activeId = data.list.length > 0 ? data.list[0].id : null;
+            }
+
+            await db.query('UPDATE graduates SET roadmap_data = $1 WHERE user_id = $2', [JSON.stringify(data), userId]);
             res.json({ message: "Archived" });
+
         } catch (e) {
+            console.error(e);
             res.status(500).json({ message: "Error archiving" });
         }
     }

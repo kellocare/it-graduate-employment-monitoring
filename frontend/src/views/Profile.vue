@@ -63,6 +63,7 @@
             item-key="toString()"
             class="drag-column"
             ghost-class="ghost-card"
+            handle=".drag-handle"
             @end="saveLayout"
           >
             <template #item="{ element }">
@@ -158,17 +159,32 @@
                       </a-form>
                   </div>
 
-                  <!-- 2. ВИДЖЕТ: ROADMAP -->
-                  <div v-if="element === 'roadmap' && isStudent && roadmapData.length" class="glass-card card-accent-purple">
+                  <!-- 2. ВИДЖЕТ: ROADMAP (ОБНОВЛЕН ДЛЯ МУЛЬТИ-ТРЕКОВ) -->
+                  <div v-if="element === 'roadmap' && isStudent && roadmapList.length > 0" class="glass-card card-accent-purple">
                       <div class="card-header">
                           <h3><compass-outlined /> Мое развитие</h3>
-                          <div class="header-actions"><router-link to="/roadmap" class="btn-icon-link"><arrow-right-outlined /></router-link><drag-outlined class="drag-handle" /></div>
+                          <div class="header-actions">
+                              <router-link to="/roadmap" class="btn-icon-link"><arrow-right-outlined /></router-link>
+                              <drag-outlined class="drag-handle" />
+                          </div>
                       </div>
-                      <div class="roadmap-widget-content">
-                          <h4 class="roadmap-title">{{ currentRoadmapTitle }}</h4>
-                          <div class="circle-wrapper"><a-progress type="circle" :percent="currentRoadmapProgress" :width="100" stroke-color="#8b5cf6" /></div>
-                          <div class="rp-next"><span>Следующий шаг:</span><strong>{{ nextRoadmapStep }}</strong></div>
+
+                      <!-- СПИСОК ТРЕКОВ -->
+                      <div class="roadmap-multi-list">
+                          <div v-for="track in roadmapList" :key="track.id" class="rm-track-item">
+                              <div class="rm-track-info">
+                                  <div class="rm-role">{{ track.role }}</div>
+                                  <div class="rm-status">{{ getTrackProgress(track) }}% завершено</div>
+                              </div>
+                              <div class="rm-track-chart">
+                                   <a-progress type="circle" :percent="getTrackProgress(track)" :width="40" :stroke-width="10" stroke-color="#8b5cf6" :show-info="false" />
+                              </div>
+                          </div>
                       </div>
+                  </div>
+                  <div v-else-if="element === 'roadmap' && isStudent" class="glass-card card-accent-purple">
+                      <div class="card-header"><h3><compass-outlined /> Мое развитие</h3><drag-outlined class="drag-handle" /></div>
+                      <div class="empty-timeline">Нет активных треков. <router-link to="/roadmap">Создать?</router-link></div>
                   </div>
 
                   <!-- 3. ВИДЖЕТ: КАРЬЕРА -->
@@ -281,29 +297,24 @@
             </template>
           </draggable>
 
-          <!-- ПРАВАЯ КОЛОНКА (АБСОЛЮТНО ТАКОЙ ЖЕ КОД, Draggable требует дублирования template для рендеринга item) -->
-          <!-- Чтобы не дублировать код виджетов на 500 строк, во Vue 3 лучше выносить виджеты в отдельные компоненты. -->
-          <!-- Но раз просили один файл, я сделал ХАК: Один draggable на всю ширину с flex-wrap или Grid внутри? -->
-          <!-- Нет, draggable не умеет grid item по двум спискам. -->
-          <!-- Решение: ПОВТОРИТЬ БЛОК <template #item> во втором draggable. Это единственный способ в одном файле без доп компонентов. -->
-
+          <!-- ПРАВАЯ КОЛОНКА -->
           <draggable
             v-model="layout.right"
             group="widgets"
             item-key="toString()"
             class="drag-column"
             ghost-class="ghost-card"
+            handle=".drag-handle"
             @end="saveLayout"
           >
             <template #item="{ element }">
                <div class="widget-wrapper fade-in">
 
-                  <!-- ПОВТОР ТЕХ ЖЕ САМЫХ ВИДЖЕТОВ (КОПИПАСТА для правой колонки) -->
-                  <!-- Vue Draggable рендерит контент ВНУТРИ себя. -->
+                  <!-- ДУБЛИРУЕМ КОД ВИДЖЕТОВ ДЛЯ ПРАВОЙ КОЛОНКИ -->
 
+                  <!-- 1. INFO (RIGHT) -->
                   <div v-if="element === 'info'" class="glass-card card-accent-purple">
                       <div class="card-header"><h3><component :is="getHeaderIcon" /> {{ isUniversity ? 'Данные' : 'Профиль' }}</h3><drag-outlined class="drag-handle" /></div>
-                      <!-- View Mode (Simplified Copy) -->
                       <div v-if="!isEditing" class="info-view">
                           <div class="info-group">
                               <div class="info-row"><span class="label">Email</span><span class="value">{{ profile.email }}</span></div>
@@ -312,22 +323,30 @@
                               <div v-if="profile.about_me || isStudent"><div class="divider"></div><p class="about-text">{{ profile.about_me || 'Пусто' }}</p></div>
                           </div>
                       </div>
-                      <!-- Edit Mode (Simplified Copy) - В реальности перетаскивают в режиме просмотра, а редактируют на месте -->
                       <a-form v-else layout="vertical" class="modern-form"><a-form-item label="Имя"><a-input v-model:value="form.first_name"/></a-form-item><div class="edit-actions"><a-button type="primary" @click="saveProfile">Сохранить</a-button></div></a-form>
                   </div>
 
-                  <!-- ДЛЯ ЭКОНОМИИ МЕСТА Я СДЕЛАЮ ХИТРОСТЬ:
-                       Вместо дублирования 300 строк кода, я определю виджеты как <template v-if> в самом верху
-                       и буду использовать их, но в Vue SFC так нельзя без компонентов.
-
-                       ПОЭТОМУ: Ниже я вставляю ПОЛНЫЙ ПОВТОР всех виджетов для правой колонки.
-                       Это увеличит файл, но стили будут работать железно.
-                  -->
-
-                  <!-- 2. ROADMAP (RIGHT) -->
-                  <div v-if="element === 'roadmap' && isStudent && roadmapData.length" class="glass-card card-accent-purple">
-                      <div class="card-header"><h3><compass-outlined /> Развитие</h3><div class="header-actions"><router-link to="/roadmap" class="btn-icon-link"><arrow-right-outlined /></router-link><drag-outlined class="drag-handle" /></div></div>
-                      <div class="roadmap-widget-content"><h4 class="roadmap-title">{{ currentRoadmapTitle }}</h4><div class="circle-wrapper"><a-progress type="circle" :percent="currentRoadmapProgress" :width="100" stroke-color="#8b5cf6" /></div></div>
+                  <!-- 2. ROADMAP (RIGHT) - 🔥 ОБНОВЛЕНО -->
+                  <div v-if="element === 'roadmap' && isStudent && roadmapList.length > 0" class="glass-card card-accent-purple">
+                      <div class="card-header">
+                          <h3><compass-outlined /> Мое развитие</h3>
+                          <div class="header-actions"><router-link to="/roadmap" class="btn-icon-link"><arrow-right-outlined /></router-link><drag-outlined class="drag-handle" /></div>
+                      </div>
+                      <div class="roadmap-multi-list">
+                          <div v-for="track in roadmapList" :key="track.id" class="rm-track-item">
+                              <div class="rm-track-info">
+                                  <div class="rm-role">{{ track.role }}</div>
+                                  <div class="rm-status">{{ getTrackProgress(track) }}% завершено</div>
+                              </div>
+                              <div class="rm-track-chart">
+                                   <a-progress type="circle" :percent="getTrackProgress(track)" :width="40" :stroke-width="10" stroke-color="#8b5cf6" :show-info="false" />
+                              </div>
+                          </div>
+                      </div>
+                  </div>
+                  <div v-else-if="element === 'roadmap' && isStudent" class="glass-card card-accent-purple">
+                      <div class="card-header"><h3><compass-outlined /> Мое развитие</h3><drag-outlined class="drag-handle" /></div>
+                      <div class="empty-timeline">Нет активных треков. <router-link to="/roadmap">Создать?</router-link></div>
                   </div>
 
                   <!-- 3. CAREER (RIGHT) -->
@@ -390,7 +409,6 @@
 import api from '../axios';
 import draggable from 'vuedraggable';
 import { message } from 'ant-design-vue';
-// Импортируем ВСЕ иконки, которые используются
 import {
   UserOutlined, EditOutlined, LinkOutlined, SolutionOutlined, PlusOutlined, DeleteOutlined,
   BankOutlined, CameraOutlined, PhoneOutlined, MailOutlined, EnvironmentOutlined,
@@ -431,9 +449,12 @@ export default {
 
       adminNotes: localStorage.getItem('admin_notes') || '',
       systemLogs: [], logsLoading: false, systemHealth: { ping: null, status: 'unknown', version: '...' },
-      roadmapData: [], currentRoadmapTitle: 'My Roadmap', roadmapHistory: [],
 
-      // Лейаут по умолчанию (ID виджетов)
+      // 🔥 ОБНОВЛЕНО: СПИСОК РОАДМАПОВ
+      roadmapList: [],
+      roadmapHistory: [],
+
+      // Лейаут по умолчанию
       layout: { left: [], right: [] }
     };
   },
@@ -443,7 +464,7 @@ export default {
     isAdmin() { return this.userRole === 'admin'; },
     isUniversity() { return this.userRole === 'university_staff'; },
 
-    getCardAccentClass() { return 'card-accent-purple'; }, // Упростили для примера
+    getCardAccentClass() { return 'card-accent-purple'; },
     getHeaderIcon() { if (this.isUniversity) return 'BankOutlined'; if (this.isAdmin) return 'DashboardOutlined'; return 'UserOutlined'; },
 
     completionRate() {
@@ -453,18 +474,6 @@ export default {
       if (this.profile.city) score++; if (this.profile.gender) score++; if (this.profile.birth_date) score++;
       if (this.profile.education_level) score++; if (this.employmentRecords.length > 0) score++;
       return Math.round((score / total) * 100);
-    },
-    currentRoadmapProgress() {
-        if (!this.roadmapData.length) return 0;
-        const nodes = this.roadmapData.filter(el => el.type === 'custom');
-        if (nodes.length === 0) return 0;
-        const done = nodes.reduce((acc, n) => acc + (n.data.done ? 1 : 0), 0);
-        return Math.round((done / nodes.length) * 100);
-    },
-    nextRoadmapStep() {
-        if (!this.roadmapData.length) return '—';
-        const next = this.roadmapData.find(el => el.type === 'custom' && !el.data.done);
-        return next ? next.data.label : 'Финиш!';
     }
   },
   async mounted() {
@@ -491,39 +500,38 @@ export default {
     },
     saveLayout() { localStorage.setItem(`profile_layout_${this.userRole}`, JSON.stringify(this.layout)); },
 
-    // --- Data & Actions ---
-    async loadData() {
-      try {
-        let url = '/graduates/me';
-        if (this.isEmployer) url = '/recruiters/me'; if (this.isUniversity) url = '/university/me'; if (this.isAdmin) url = '/admin/me';
-        const r = await api.get(url); this.profile = r.data;
-        if (!this.profile.portfolio_links) this.profile.portfolio_links = [];
-        if (typeof this.profile.portfolio_links === 'string') { try { this.profile.portfolio_links = JSON.parse(this.profile.portfolio_links); } catch(e) { this.profile.portfolio_links = []; } }
-        if (this.profile.birth_date) this.profile.birth_date = this.profile.birth_date.split('T')[0];
-      } catch (e) { if(this.isAdmin) this.profile = { first_name:'Admin', last_name:'Root', email:'root@local' }; }
+    // 🔥 ЗАГРУЗКА ДАННЫХ С НОВОЙ СТРУКТУРОЙ
+    async loadRoadmapData() {
+        try {
+            const r = await api.get('/chat/roadmap');
+            if (r.data && r.data.list && Array.isArray(r.data.list)) {
+                // Если есть список треков
+                this.roadmapList = r.data.list;
+            } else if (r.data && r.data.nodes) {
+                // Обратная совместимость
+                this.roadmapList = [{ id: 'legacy', role: r.data.role || 'My Roadmap', nodes: r.data.nodes }];
+            }
+        } catch(e) { console.error("Roadmap Error", e); }
     },
+
+    // ХЕЛПЕР ДЛЯ ПОДСЧЕТА ПРОГРЕССА
+    getTrackProgress(track) {
+        if (!track.nodes) return 0;
+        const nodes = track.nodes.filter(el => el.type === 'custom');
+        if (!nodes.length) return 0;
+        const done = nodes.reduce((acc, n) => acc + (n.data?.done ? 1 : 0), 0);
+        return Math.round((done / nodes.length) * 100);
+    },
+
+    // Остальные методы без изменений
+    async loadData() { try { let url = '/graduates/me'; if (this.isEmployer) url = '/recruiters/me'; if (this.isUniversity) url = '/university/me'; if (this.isAdmin) url = '/admin/me'; const r = await api.get(url); this.profile = r.data; if (!this.profile.portfolio_links) this.profile.portfolio_links = []; if (typeof this.profile.portfolio_links === 'string') { try { this.profile.portfolio_links = JSON.parse(this.profile.portfolio_links); } catch(e) { this.profile.portfolio_links = []; } } if (this.profile.birth_date) this.profile.birth_date = this.profile.birth_date.split('T')[0]; } catch (e) { if(this.isAdmin) this.profile = { first_name:'Admin', last_name:'Root', email:'root@local' }; } },
     enableEdit() { this.form = JSON.parse(JSON.stringify(this.profile)); if(this.form.birth_date) this.form.birth_date = this.form.birth_date.split('T')[0]; if(!this.form.portfolio_links) this.form.portfolio_links = []; this.isEditing = true; },
     cancelEdit() { this.isEditing = false; },
-    async saveProfile() {
-        this.saving = true;
-        try {
-            let url = '/graduates/me'; if (this.isEmployer) url = '/recruiters/me'; if (this.isUniversity) url = '/university/me';
-            if (this.isAdmin) { this.isEditing=false; return message.success('Saved'); }
-            const r = await api.put(url, this.form); this.profile = {...this.profile, ...r.data};
-            if(this.profile.birth_date && this.profile.birth_date.includes('T')) this.profile.birth_date = this.profile.birth_date.split('T')[0];
-            if (this.isStudent && this.form.specialty_id) { const s = this.specialties.find(i => i.id === this.form.specialty_id); if(s) { this.profile.specialty_code = s.code; this.profile.specialty_name = s.name; } }
-            message.success('Обновлено'); this.isEditing = false;
-        } catch(e) { message.error('Ошибка'); } finally { this.saving = false; }
-    },
+    async saveProfile() { this.saving = true; try { let url = '/graduates/me'; if (this.isEmployer) url = '/recruiters/me'; if (this.isUniversity) url = '/university/me'; if (this.isAdmin) { this.isEditing=false; return message.success('Saved'); } const r = await api.put(url, this.form); this.profile = {...this.profile, ...r.data}; if(this.profile.birth_date && this.profile.birth_date.includes('T')) this.profile.birth_date = this.profile.birth_date.split('T')[0]; if (this.isStudent && this.form.specialty_id) { const s = this.specialties.find(i => i.id === this.form.specialty_id); if(s) { this.profile.specialty_code = s.code; this.profile.specialty_name = s.name; } } message.success('Обновлено'); this.isEditing = false; } catch(e) { message.error('Ошибка'); } finally { this.saving = false; } },
     async handleAvatarUpload({ file }) { await this.genericUpload(file, '/graduates/avatar', 'avatar_url'); },
     async handleLogoUpload({ file }) { await this.genericUpload(file, '/university/logo', 'university_logo'); },
     async handleStampUpload({ file }) { await this.genericUpload(file, '/university/stamp', 'stamp_url'); },
-    async genericUpload(file, url, fieldName) {
-        const formData = new FormData(); const formField = fieldName === 'avatar_url' ? 'avatar' : 'file';
-        if(fieldName === 'avatar_url' && this.isUniversity) url = '/university/avatar';
-        formData.append(formField, file);
-        try { const r = await api.post(url, formData); const newUrl = r.data[fieldName] || r.data.avatar_url || r.data.university_logo || r.data.stamp_url; this.profile[fieldName] = newUrl; this.form[fieldName] = newUrl; message.success('Загружено'); } catch(e) { message.error('Ошибка'); }
-    },
+    async genericUpload(file, url, fieldName) { const formData = new FormData(); const formField = fieldName === 'avatar_url' ? 'avatar' : 'file'; if(fieldName === 'avatar_url' && this.isUniversity) url = '/university/avatar'; formData.append(formField, file); try { const r = await api.post(url, formData); const newUrl = r.data[fieldName] || r.data.avatar_url || r.data.university_logo || r.data.stamp_url; this.profile[fieldName] = newUrl; this.form[fieldName] = newUrl; message.success('Загружено'); } catch(e) { message.error('Ошибка'); } },
     getAvatarUrl(url) { return url ? `http://localhost:4000${url}` : null; },
     getFileUrl(path) { return `http://localhost:4000${path}`; },
     formatDate(d) { return d ? new Date(d).toLocaleDateString() : '—'; },
@@ -541,7 +549,6 @@ export default {
     async loadResumes() { try { const r = await api.get('/resumes'); this.resumes = r.data; } catch(e){} },
     async loadUniStats() { try { const r = await api.get('/university/stats'); this.uniStats = r.data; } catch(e){} },
     async loadReports() { try { const r = await api.get('/university/reports'); this.savedReports = r.data; } catch(e){} },
-    async loadRoadmapData() { try { const r = await api.get('/chat/roadmap'); if (r.data?.nodes) { this.roadmapData = r.data.nodes; this.currentRoadmapTitle = r.data.role; } } catch(e) {} },
     async loadRoadmapHistory() { try { const r = await api.get('/chat/roadmap/history'); this.roadmapHistory = r.data; } catch(e){} },
     async checkSystemHealth() { try { await api.get('/news?limit=1'); this.systemHealth = { ping: 50, status: 'ok', version: 'v1.2' }; } catch (e) { this.systemHealth.status='error'; } },
     async loadSystemLogs() { try { const r = await api.get('/admin/logs'); this.systemLogs = r.data.slice(0, 10); } catch(e){} },
@@ -565,14 +572,15 @@ export default {
   gap: 25px;
   align-items: start;
   margin-top: 20px;
+  width: 100%;
 }
 @media (max-width: 900px) { .drag-grid-layout { grid-template-columns: 1fr; } }
-.drag-column { min-height: 100px; }
-.ghost-card { opacity: 0.4; border: 2px dashed #1890ff; background: #e6f7ff; }
+.drag-column { min-height: 100px; display: flex; flex-direction: column; gap: 20px; width: 100%; }
+.ghost-card { opacity: 0.4; border: 2px dashed #1890ff; background: #e6f7ff; height: 100px; }
 .drag-handle { cursor: move; color: #cbd5e1; font-size: 1.1rem; transition: 0.2s; margin-left: auto; }
 .drag-handle:hover { color: #1890ff; }
 
-/* MAIN STYLES */
+/* STYLES */
 .page-wrapper { min-height: 100vh; background: #f3f4f6; display: flex; justify-content: center; padding: 30px 20px; }
 .content-container { width: 100%; max-width: 1200px; position: relative; z-index: 1; }
 .blobs-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; }
@@ -581,7 +589,7 @@ export default {
 .blob-2 { background: #3b82f6; width: 300px; height: 300px; bottom: -50px; right: -50px; }
 .blob-3 { background: #2dd4bf; width: 250px; height: 250px; top: 30%; left: 40%; opacity: 0.3; }
 
-.glass-card { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(20px); border: 1px solid white; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); padding: 25px; margin-bottom: 25px; transition: transform 0.2s; }
+.glass-card { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(20px); border: 1px solid white; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); padding: 25px; transition: transform 0.2s; }
 .admin-theme { background: linear-gradient(135deg, rgba(255,255,255,0.95), rgba(235, 245, 255, 0.9)); border-color: #dbeafe; }
 .uni-theme { background: linear-gradient(135deg, rgba(255,255,255,0.95), rgba(236, 253, 245, 0.9)); border-color: #ccfbf1; }
 .card-accent-purple { border-top: 4px solid #a855f7; }
@@ -637,7 +645,14 @@ export default {
 .uploads-section { background: #f8fafc; padding: 15px; border-radius: 12px; border: 1px dashed #cbd5e1; margin-top: 15px; }
 .upload-grid { display: flex; gap: 15px; } .upload-placeholder { width: 70px; height: 70px; border: 2px dashed #e2e8f0; border-radius: 10px; display: flex; align-items: center; justify-content: center; cursor: pointer; background: white; color: #9ca3af; margin: 0 auto; } .ub-label { font-size: 0.8rem; text-align: center; margin-bottom: 5px; color: #64748b; }
 
-/* TIMELINE & LISTS */
+/* ROADMAP LIST (New) */
+.roadmap-multi-list { display: flex; flex-direction: column; gap: 8px; }
+.rm-track-item { display: flex; align-items: center; justify-content: space-between; background: white; padding: 12px 16px; border-radius: 12px; border: 1px solid #e5e7eb; }
+.rm-track-info { flex: 1; }
+.rm-role { font-weight: 700; color: #374151; font-size: 0.95rem; }
+.rm-status { font-size: 0.75rem; color: #9ca3af; margin-top: 2px; }
+.rm-track-chart { margin-left: 10px; }
+
 .timeline-container { margin-top: 10px; }
 .timeline-card { background: white; border-radius: 12px; padding: 12px; border: 1px solid #f3f4f6; margin-bottom: 10px; }
 .timeline-header { display: flex; justify-content: space-between; }
@@ -662,10 +677,11 @@ export default {
 .doc-item { display: flex; align-items: center; gap: 8px; padding: 8px; background: #f8fafc; border-radius: 8px; font-size: 0.9rem; font-weight: 600; color: #334155; }
 .doc-icon { color: #10b981; }
 
-.roadmap-widget-content { text-align: center; } .circle-wrapper { margin: 10px 0; } .rp-next { font-size: 0.9rem; color: #6b7280; } .rp-next strong { color: #8b5cf6; }
-
 .admin-metrics { display: flex; gap: 10px; } .metric-item { flex: 1; background: white; padding: 8px; border-radius: 8px; text-align: center; border: 1px solid #e2e8f0; } .m-val { font-weight: 800; color: #1e293b; } .m-label { font-size: 0.7rem; color: #94a3b8; text-transform: uppercase; }
 .logs-list { max-height: 150px; overflow-y: auto; display: flex; flex-direction: column; gap: 5px; } .log-item { font-size: 0.8rem; padding: 4px 0; border-bottom: 1px solid #f1f5f9; color: #475569; }
+
+.btn-icon-link { border: none; background: none; color: #9ca3af; cursor: pointer; font-size: 1.2rem; transition: 0.2s; display: flex; align-items: center; }
+.btn-icon-link:hover { color: #1890ff; transform: translateX(3px); }
 
 .empty-timeline { text-align: center; color: #9ca3af; padding: 15px; font-size: 0.9rem; }
 .fade-in { animation: fadeIn 0.5s ease-out; }

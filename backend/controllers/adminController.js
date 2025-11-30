@@ -103,26 +103,42 @@ class AdminController {
         try {
             if (req.user.role !== 'admin') return res.status(403).json({ message: "Нет доступа" });
 
+            // 🔥 ДОБАВИЛ LEFT JOIN university_staff
             const result = await db.query(`
-                SELECT u.id, u.email, u.role, u.is_verified, u.created_at,
+                SELECT u.id, u.email, u.role, u.is_verified, u.created_at, u.avatar_url,
                        g.first_name as g_name, g.last_name as g_last,
-                       r.first_name as r_name, r.last_name as r_last
+                       r.first_name as r_name, r.last_name as r_last,
+                       s.full_name as s_name, s.university_name as s_uni
                 FROM users u
                 LEFT JOIN graduates g ON u.id = g.user_id
                 LEFT JOIN recruiters r ON u.id = r.user_id
+                LEFT JOIN university_staff s ON u.id = s.user_id
                 ORDER BY u.created_at DESC
             `);
 
-            const users = result.rows.map(u => ({
-                id: u.id,
-                email: u.email,
-                role: u.role,
-                is_verified: u.is_verified,
-                created_at: u.created_at,
-                name: u.role === 'employer'
-                    ? `${u.r_name || ''} ${u.r_last || ''}`.trim()
-                    : `${u.g_name || ''} ${u.g_last || ''}`.trim()
-            }));
+            const users = result.rows.map(u => {
+                let name = 'Не указано';
+
+                // Логика выбора имени в зависимости от роли
+                if (u.role === 'employer') {
+                    name = `${u.r_name || ''} ${u.r_last || ''}`.trim();
+                } else if (u.role === 'graduate') {
+                    name = `${u.g_name || ''} ${u.g_last || ''}`.trim();
+                } else if (u.role === 'university_staff') {
+                    name = u.s_name || 'Сотрудник ВУЗа';
+                }
+
+                return {
+                    id: u.id,
+                    email: u.email,
+                    role: u.role,
+                    is_verified: u.is_verified,
+                    created_at: u.created_at,
+                    avatar_url: u.avatar_url,
+                    name: name || 'Без имени',
+                    university: u.s_uni // Доп поле для вуза
+                };
+            });
 
             res.json(users);
         } catch (e) {
@@ -153,18 +169,21 @@ class AdminController {
         }
     }
 
-    getAuditLogs = async (req, res) => {
+    async getAuditLogs(req, res) {
         try {
-            const result = await db.query(`
-                SELECT l.*, u.email as admin_email 
+            const logs = await db.query(`
+                SELECT 
+                    l.id, l.action, l.details, l.created_at, l.ip_address as ip,
+                    u.email as admin_email
                 FROM audit_logs l
                 LEFT JOIN users u ON l.admin_id = u.id
                 ORDER BY l.created_at DESC
                 LIMIT 100
             `);
-            res.json(result.rows);
+            res.json(logs.rows);
         } catch (e) {
-            res.status(500).json({ message: "Ошибка логов" });
+            console.error(e);
+            res.status(500).json({message: "Ошибка логов"});
         }
     }
 
@@ -173,13 +192,16 @@ class AdminController {
         try {
             if (req.user.role !== 'admin') return res.status(403).json({ message: "Нет доступа" });
 
+            // Тот же запрос с JOIN
             const result = await db.query(`
                 SELECT u.id, u.email, u.role, u.is_verified, u.created_at,
                        g.first_name as g_name, g.last_name as g_last,
-                       r.first_name as r_name, r.last_name as r_last
+                       r.first_name as r_name, r.last_name as r_last,
+                       s.full_name as s_name
                 FROM users u
                 LEFT JOIN graduates g ON u.id = g.user_id
                 LEFT JOIN recruiters r ON u.id = r.user_id
+                LEFT JOIN university_staff s ON u.id = s.user_id
                 ORDER BY u.created_at DESC
             `);
 
@@ -188,9 +210,9 @@ class AdminController {
 
             worksheet.columns = [
                 { header: 'ID', key: 'id', width: 10 },
-                { header: 'Роль', key: 'role', width: 15 },
+                { header: 'Роль', key: 'role', width: 20 },
                 { header: 'Email', key: 'email', width: 30 },
-                { header: 'Имя Фамилия', key: 'name', width: 30 },
+                { header: 'Имя / Организация', key: 'name', width: 35 },
                 { header: 'Статус', key: 'status', width: 15 },
                 { header: 'Дата регистрации', key: 'date', width: 20 },
             ];
@@ -198,18 +220,29 @@ class AdminController {
             worksheet.getRow(1).font = { bold: true };
 
             result.rows.forEach(u => {
-                const name = u.role === 'employer'
-                    ? `${u.r_name || ''} ${u.r_last || ''}`.trim()
-                    : `${u.g_name || ''} ${u.g_last || ''}`.trim();
+                let name = '';
+                let roleName = '';
 
-                let roleName = u.role === 'employer' ? 'Работодатель' : (u.role === 'admin' ? 'Админ' : 'Студент');
+                if (u.role === 'employer') {
+                    name = `${u.r_name || ''} ${u.r_last || ''}`;
+                    roleName = 'Работодатель';
+                } else if (u.role === 'university_staff') {
+                    name = u.s_name;
+                    roleName = 'ВУЗ';
+                } else if (u.role === 'admin') {
+                    name = 'Administrator';
+                    roleName = 'Админ';
+                } else {
+                    name = `${u.g_name || ''} ${u.g_last || ''}`;
+                    roleName = 'Студент';
+                }
 
                 worksheet.addRow({
                     id: u.id,
                     role: roleName,
                     email: u.email,
-                    name: name || 'Не указано',
-                    status: u.is_verified ? 'Подтвержден' : 'Не активен',
+                    name: name.trim() || 'Не указано',
+                    status: u.is_verified ? 'Активен' : 'Не подтвержден',
                     date: new Date(u.created_at).toLocaleDateString('ru-RU')
                 });
             });
@@ -222,7 +255,7 @@ class AdminController {
 
         } catch (e) {
             console.error("Excel Export Error:", e);
-            res.status(500).json({ message: "Ошибка формирования Excel файла" });
+            res.status(500).json({ message: "Ошибка экспорта" });
         }
     }
 

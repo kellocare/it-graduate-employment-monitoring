@@ -4,6 +4,7 @@ const jwt = require('jsonwebtoken');
 const mailService = require('../services/mailService');
 const axios = require('axios');
 const { validatePassword, validateEmailDNS, verifyCaptcha } = require('../utils/security');
+const auditService = require('../services/auditService');
 
 class AuthController {
     constructor() {
@@ -65,10 +66,13 @@ class AuthController {
             const link = `${process.env.API_URL || 'http://localhost:4000'}/api/auth/activate/${activationToken}`;
             await mailService.sendActivationMail(email, link);
 
+            await auditService.log(userId, 'AUTH_REGISTER', userId, `Регистрация с ролью: ${role}`);
+
             res.json({ message: 'На вашу почту отправлено письмо для подтверждения аккаунта.' });
 
         } catch (e) {
             console.error(e);
+
             res.status(500).json({ message: 'Ошибка регистрации' });
         }
     }
@@ -120,6 +124,9 @@ class AuthController {
                     lastName = names[1] || '';
                 }
             }
+
+            const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+            await auditService.log(user.id, 'AUTH_LOGIN', user.id, `Вход с IP: ${ip}`, ip);
 
             res.json({ token, user: { id: user.id, email: user.email, role: user.role, first_name: firstName, last_name: lastName } });
 

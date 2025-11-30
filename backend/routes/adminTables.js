@@ -7,21 +7,26 @@ const db = require('../db');
 
 // 🛡️ БЕЛЫЙ СПИСОК (WHITELIST)
 // Ключ: то, что шлет фронтенд -> Значение: реальное название таблицы в БД
-// Я заполнил на основе твоего скриншота
 const TABLE_MAP = {
     'users': 'users',
     'vacancies': 'vacancies',
     'companies': 'companies',
     'resumes': 'resumes',
-    'applications': 'applications',
+    'applications': 'applications', // Старые AI отклики
+    'job_applications': 'job_applications', // Новые простые отклики
     'news': 'news',
     'reviews': 'reviews',
     'skills': 'skills',
     'specialties': 'specialties',
     'graduates': 'graduates',
     'recruiters': 'recruiters',
+    'university_staff': 'university_staff', // Сотрудники ВУЗа
+    'university_reports': 'university_reports', // Отчеты
     'audit_logs': 'audit_logs',
-    'notifications': 'notifications'
+    'notifications': 'notifications',
+    'chat_messages': 'chat_messages',
+    'interviews': 'interviews',
+    'roadmap_history': 'roadmap_history'
 };
 
 // GET: Получение данных (LIMIT 100)

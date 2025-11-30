@@ -1,16 +1,27 @@
 const db = require('../db');
 
 class AuditService {
-    async log(adminId, action, targetId, details, ip = '127.0.0.1') {
+
+    /**
+     * Записать действие в лог
+     * @param {number} adminId - ID пользователя, который совершил действие
+     * @param {string} action - Тип действия (AUTH_LOGIN, USER_DELETE, VACANCY_APPROVE и т.д.)
+     * @param {number|null} targetId - ID объекта, над которым совершено действие
+     * @param {string|object} details - Описание или JSON с деталями
+     * @param {string} ip - IP адрес (опционально)
+     */
+    async log(adminId, action, targetId = null, details = '', ip = '') {
         try {
+            const detailsStr = typeof details === 'object' ? JSON.stringify(details) : details;
+
             await db.query(
-                `INSERT INTO audit_logs (admin_id, action, target_id, details, ip_address, created_at)
-                 VALUES ($1, $2, $3, $4, $5, NOW())`,
-                [adminId, action, targetId, details, ip]
+                `INSERT INTO audit_logs (admin_id, action, target_id, details, ip_address) 
+                 VALUES ($1, $2, $3, $4, $5)`,
+                [adminId, action, targetId, detailsStr, ip]
             );
         } catch (e) {
-            console.error("Audit Log Error:", e);
-            // Не роняем сервер, если лог не записался
+            console.error("Audit Log Error:", e.message);
+            // Ошибки логов не должны ломать основное приложение
         }
     }
 }
