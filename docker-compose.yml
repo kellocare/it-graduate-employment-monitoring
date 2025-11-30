@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  # 1. База данных PostgreSQL
+  db:
+    image: postgres:15-alpine
+    container_name: it_monitor_db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: zXCcursed9012
+      POSTGRES_DB: graduate_monitoring
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data_final:/var/lib/postgresql/data
+      # - ./database/backup:/docker-entrypoint-initdb.d/init.sql
+
+  # 2. Бэкенд
+  backend:
+    build: ./backend
+    container_name: it_monitor_backend
+    restart: always
+    ports:
+      - "4000:4000"
+    environment:
+      PORT: 4000
+      # Важно: внутри докера хост базы не localhost, а имя сервиса (db)
+      DB_HOST: db
+      DB_USER: postgres
+      DB_PASSWORD: zXCcursed9012
+      DB_NAME: graduate_monitoring
+      DB_PORT: 5432
+      SECRET_KEY: tvoy_sekretny_klyuch
+      GROQ_API_KEY: ${GROQ_API_KEY} # Подтянется из твоего .env файла на компьютере
+    depends_on:
+      - db
+
+  # 3. Фронтенд
+  frontend:
+    build: ./frontend
+    container_name: it_monitor_frontend
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data_final:
