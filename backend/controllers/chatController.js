@@ -76,6 +76,7 @@ class ChatController {
             });
 
             // 3. ПРОВЕРКА УРОВНЯ И ВЫДАЧА НАГРАД
+            // Уровень считается каждые 500 XP
             const oldLevel = Math.floor(currentDbXp / 500) + 1;
             const newLevel = Math.floor(totalXp / 500) + 1;
 
@@ -84,15 +85,37 @@ class ChatController {
 
             // Если уровень вырос
             if (newLevel > oldLevel) {
+                // 🔥 РАСШИРЕННАЯ КАРТА НАГРАД (30 уровней)
                 const rewardsMap = {
-                    2:  { id: 'frame_blue', name: '🎨 Синяя рамка аватара' },
-                    3:  { id: 'ai_token', name: '📄 AI-разбор резюме' },
-                    5:  { id: 'fire_effect', name: '🔥 Эффект "В огне"' },
-                    7:  { id: 'profile_boost', name: '🚀 Буст профиля' },
+                    2:  { id: 'frame_blue', name: '🎨 Синяя рамка' },
+                    3:  { id: 'ai_token', name: '📄 AI-разбор резюме (токен)' },
+                    4:  { id: 'badge_fast', name: '⚡ Бейдж "Быстрый старт"' },
+                    5:  { id: 'frame_green', name: '🌿 Эко-рамка' },
+                    6:  { id: 'effect_confetti', name: '🎉 Эффект "Конфетти"' },
+                    7:  { id: 'profile_boost', name: '🚀 Буст профиля в поиске' },
+                    8:  { id: 'badge_book', name: '📚 Бейдж "Теоретик"' },
+                    9:  { id: 'frame_gold', name: '🏆 Золотая рамка' },
                     10: { id: 'theme_dark', name: '🕶 Тёмная тема' },
-                    15: { id: 'badge_top', name: '🌟 Бейдж Топ-талант' },
+                    11: { id: 'effect_snow', name: '❄ Эффект "Холод"' },
+                    12: { id: 'badge_puzzle', name: '🧩 Бейдж "Problem Solver"' },
+                    13: { id: 'frame_red', name: '🔴 Красная рамка агрессора' },
+                    14: { id: 'ai_token_pro', name: '🤖 AI-ментор (токен)' },
+                    15: { id: 'badge_top', name: '🌟 Бейдж "Топ-талант"' },
+                    16: { id: 'effect_fire', name: '🔥 Эффект "В огне"' },
+                    17: { id: 'frame_neon', name: '👾 Неоновая кибер-рамка' },
+                    18: { id: 'badge_rocket', name: '🚀 Бейдж "На взлет"' },
+                    19: { id: 'theme_matrix', name: '📟 Тема "Матрица"' },
                     20: { id: 'mentor_status', name: '🎓 Статус Ментора' },
-                    30: { id: 'crown', name: '👑 Корона Guru' }
+                    21: { id: 'effect_lightning', name: '⚡ Эффект "Молнии"' },
+                    22: { id: 'frame_diamond', name: '💎 Алмазная рамка' },
+                    23: { id: 'badge_star', name: '⭐ Бейдж "Суперзвезда"' },
+                    24: { id: 'effect_rainbow', name: '🌈 Эффект "Радуга"' },
+                    25: { id: 'frame_cyber', name: '🤖 Рамка "Киберпанк"' },
+                    26: { id: 'badge_guru', name: '🧙‍♂️ Бейдж "Гуру кода"' },
+                    27: { id: 'effect_matrix', name: '🟢 Эффект "Код"' },
+                    28: { id: 'frame_royal', name: '👑 Королевская рамка' },
+                    29: { id: 'theme_gold', name: '🥇 Тема "Лакшери"' },
+                    30: { id: 'crown_animated', name: '🤴 Анимированная Корона' }
                 };
 
                 // Проверяем все уровни, которые прошли (вдруг сразу на 2 скакнули)
@@ -121,7 +144,6 @@ class ChatController {
     getHistory = async (req, res) => {
         try {
             const userId = req.user.id;
-            // Получаем режим из query-параметров (?mode=interview), по дефолту 'vacancy'
             const mode = req.query.mode || 'vacancy';
 
             const history = await db.query(
@@ -202,7 +224,6 @@ class ChatController {
             const { message, mode } = req.body;
             const currentMode = mode || 'vacancy';
 
-            // 🔥 ВАЖНО: Добавляем currentMode в INSERT
             await db.query(
                 'INSERT INTO chat_messages (user_id, role, content, mode) VALUES ($1, $2, $3, $4)',
                 [userId, 'user', message, currentMode]
@@ -213,7 +234,6 @@ class ChatController {
 
             let systemPrompt = "";
 
-            // --- ЛОГИКА ПРОМПТОВ ---
             if (currentMode === 'interview') {
                 systemPrompt = `
                     Ты — Технический Лид (Tech Lead), проводящий собеседование.
@@ -233,13 +253,11 @@ class ChatController {
                     Общайся дружелюбно, но профессионально. Используй Markdown для кода.
                 `;
             } else {
-                // Режим 'vacancy' (Поиск)
                 const vacanciesRes = await db.query('SELECT title FROM vacancies ORDER BY created_at DESC LIMIT 5');
                 const vacs = vacanciesRes.rows.map(v => `- ${v.title}`).join('\n');
                 systemPrompt = `Ты карьерный консультант. Вакансии:\n${vacs}`;
             }
 
-            // Получаем историю ТОЛЬКО ЭТОГО РЕЖИМА для контекста ИИ
             const historyRes = await db.query(
                 'SELECT role, content FROM chat_messages WHERE user_id = $1 AND mode = $2 ORDER BY created_at DESC LIMIT 10',
                 [userId, currentMode]
@@ -253,7 +271,6 @@ class ChatController {
 
             const aiAnswer = await aiService.getCompletion(messagesForAi);
 
-            // Сохраняем ответ ИИ тоже с указанием режима
             const savedAiMsg = await db.query(
                 'INSERT INTO chat_messages (user_id, role, content, mode) VALUES ($1, $2, $3, $4) RETURNING *',
                 [userId, 'assistant', aiAnswer, currentMode]
@@ -274,7 +291,6 @@ class ChatController {
         } catch (e) { res.status(500).json({ message: 'Error' }); }
     }
 
-    // 🔥🔥🔥 ОБНОВЛЕННЫЙ МЕТОД ГЕНЕРАЦИИ ROADMAP 🔥🔥🔥
     generateRoadmap = async (req, res) => {
         try {
             const { role } = req.body;
@@ -283,17 +299,14 @@ class ChatController {
 
             console.log(`🤖 Generating Smart Roadmap for: ${role}...`);
 
-            // 1. Сначала получаем ТЕКУЩИЕ данные, чтобы не стереть их
             const currentRes = await db.query('SELECT roadmap_data FROM graduates WHERE user_id = $1', [userId]);
             let currentData = currentRes.rows[0]?.roadmap_data || { list: [], activeId: null };
 
-            // Если вдруг там старый формат (просто массив), конвертируем
             if (Array.isArray(currentData)) {
                 currentData = { list: [{ id: 'legacy', role: 'Old Roadmap', nodes: currentData }], activeId: 'legacy' };
             }
             if (!currentData.list) currentData.list = [];
 
-            // 2. Генерируем новый контент через AI
             const prompt = `
                 Ты — Senior Technical Mentor.
                 Составь карту развития (Roadmap) для: "${role}".
@@ -313,24 +326,20 @@ class ChatController {
             `;
 
             const aiResponse = await aiService.getCompletion([{ role: 'user', content: prompt }]);
-
-            // Чистим ответ от ```json ... ```
             let cleanJson = aiResponse.replace(/```json/g, '').replace(/```/g, '').trim();
             let newNodes = JSON.parse(cleanJson);
 
-            // Валидация полей
             const validateNode = (node) => {
                 if (!node.difficulty) node.difficulty = 'medium';
                 if (!node.subtopics) node.subtopics = [];
                 node.subtopics.forEach(s => {
-                    s.done = false; // Важно: новый трек не пройден
+                    s.done = false;
                     if (!s.xpEarned) s.xpEarned = 50;
                 });
-                node.data = { done: false }; // Совместимость
+                node.data = { done: false };
             };
             newNodes.forEach(validateNode);
 
-            // 3. Создаем новый объект трека
             const newTrackId = `track-${Date.now()}`;
             const newTrack = {
                 id: newTrackId,
@@ -339,16 +348,14 @@ class ChatController {
                 nodes: newNodes
             };
 
-            // 4. ДОБАВЛЯЕМ в список (а не заменяем)
             currentData.list.push(newTrack);
-            currentData.activeId = newTrackId; // Переключаем на новый
+            currentData.activeId = newTrackId;
 
-            // 5. Сохраняем обновленный список
             await db.query('UPDATE graduates SET roadmap_data = $1 WHERE user_id = $2', [JSON.stringify(currentData), userId]);
 
             await this._recalcAndSaveXP(userId);
 
-            res.json(currentData); // Возвращаем полный объект
+            res.json(currentData);
 
         } catch (e) {
             console.error("Roadmap Error:", e);
@@ -356,10 +363,9 @@ class ChatController {
         }
     }
 
-    // --- QUIZ (ЗАДАЧА) ---
     generateNodeQuiz = async (req, res) => {
         try {
-            const { topic, description } = req.body; // topic = подтема, description = родительская тема
+            const { topic, description } = req.body;
 
             const prompt = `
                 Ты технический интервьюер.
@@ -387,7 +393,6 @@ class ChatController {
         }
     }
 
-    // --- ПРОВЕРКА ОТВЕТА ---
     checkNodeQuiz = async (req, res) => {
         try {
             const { topic, question, answer } = req.body;
@@ -419,25 +424,20 @@ class ChatController {
         }
     }
 
-    // --- СОХРАНЕНИЕ ROADMAP + ПОДСЧЕТ XP ---
-    // 🔥 ИСПРАВЛЕННОЕ СОХРАНЕНИЕ ПРОГРЕССА
     saveRoadmap = async (req, res) => {
         try {
             const userId = req.user.id;
             const { activeId, roadmapId, nodes } = req.body;
 
-            // Получаем текущие данные
             const currentRes = await db.query('SELECT roadmap_data FROM graduates WHERE user_id = $1', [userId]);
             let data = currentRes.rows[0]?.roadmap_data;
 
             if (!data || !data.list) return res.status(400).json({message: "Нет данных"});
 
-            // 1. Если просто переключаем вкладку
             if (activeId) {
                 data.activeId = activeId;
             }
 
-            // 2. Если обновляем прогресс конкретного трека
             if (roadmapId && nodes) {
                 const trackIndex = data.list.findIndex(t => t.id === roadmapId);
                 if (trackIndex !== -1) {
@@ -447,10 +447,8 @@ class ChatController {
 
             await db.query('UPDATE graduates SET roadmap_data = $1 WHERE user_id = $2', [JSON.stringify(data), userId]);
 
-            // 🔥 ВАЖНО: Получаем результат пересчета (включая награду)
             const xpResult = await this._recalcAndSaveXP(userId);
 
-            // 🔥 Отправляем всё на фронт
             res.json({
                 message: "Saved",
                 totalXp: xpResult.totalXp,
@@ -463,17 +461,12 @@ class ChatController {
         }
     }
 
-
-
-    // 1. ПОЛУЧЕНИЕ (С МИГРАЦИЕЙ)
     getRoadmap = async (req, res) => {
         try {
             const userId = req.user.id;
             const result = await db.query('SELECT roadmap_data FROM graduates WHERE user_id = $1', [userId]);
             let data = result.rows[0]?.roadmap_data;
 
-            // МИГРАЦИЯ ДАННЫХ НА ЛЕТУ
-            // Если данные в старом формате (просто массив узлов или объект {role, nodes}), превращаем в { activeId, list: [] }
             if (data && (Array.isArray(data) || (data.nodes && !data.list))) {
                 const oldNodes = Array.isArray(data) ? data : data.nodes;
                 const oldRole = data.role || "My Roadmap";
@@ -484,12 +477,10 @@ class ChatController {
                     list: [{ id: newId, role: oldRole, nodes: oldNodes }]
                 };
 
-                // Сохраняем обновленную структуру
                 await db.query('UPDATE graduates SET roadmap_data = $1 WHERE user_id = $2', [JSON.stringify(newData), userId]);
                 data = newData;
             }
 
-            // Если данных нет вообще
             if (!data) {
                 data = { activeId: null, list: [] };
             }
@@ -501,28 +492,23 @@ class ChatController {
         }
     }
 
-    // --- АРХИВАЦИЯ (ИСПРАВЛЕННАЯ) ---
     archiveRoadmap = async (req, res) => {
         try {
             const userId = req.user.id;
             const { roadmapId } = req.body;
 
-            // 1. Получаем текущие данные
             const gradRes = await db.query('SELECT roadmap_data FROM graduates WHERE user_id = $1', [userId]);
             let currentData = gradRes.rows[0]?.roadmap_data;
 
             if (!currentData || !currentData.list) return res.status(400).json({ message: "Нет данных" });
 
-            // 2. Находим нужный трек
             const trackIndex = currentData.list.findIndex(t => t.id === roadmapId);
             if (trackIndex === -1) return res.status(404).json({ message: "Трек не найден" });
 
             const trackToArchive = currentData.list[trackIndex];
 
-            // 3. СЧИТАЕМ ПРОГРЕСС ПЕРЕД АРХИВАЦИЕЙ
             let total = 0;
             let done = 0;
-            // Пробегаемся по узлам трека
             if (trackToArchive.nodes) {
                 trackToArchive.nodes.forEach(node => {
                     if (node.subtopics && node.subtopics.length > 0) {
@@ -534,29 +520,24 @@ class ChatController {
                     }
                 });
             }
-            // Вычисляем процент (если 0 задач, то 0%)
             const finalProgress = total === 0 ? 0 : Math.round((done / total) * 100);
 
-            // 4. Сохраняем в таблицу истории
             await db.query(
                 'INSERT INTO roadmap_history (user_id, role_title, progress, roadmap_data, completed_at) VALUES ($1, $2, $3, $4, NOW())',
                 [
                     userId,
                     trackToArchive.role || 'Roadmap',
-                    finalProgress, // <--- ЗАПИСЫВАЕМ РЕАЛЬНЫЙ ПРОГРЕСС
-                    JSON.stringify(trackToArchive.nodes) // Сохраняем узлы, чтобы считать XP потом
+                    finalProgress,
+                    JSON.stringify(trackToArchive.nodes)
                 ]
             );
 
-            // 5. Удаляем из активного списка
             currentData.list.splice(trackIndex, 1);
 
-            // Если удалили активный, переключаем на последний доступный
             if (currentData.activeId === roadmapId) {
                 currentData.activeId = currentData.list.length > 0 ? currentData.list[currentData.list.length - 1].id : null;
             }
 
-            // 6. Обновляем таблицу graduates
             await db.query('UPDATE graduates SET roadmap_data = $1 WHERE user_id = $2', [JSON.stringify(currentData), userId]);
 
             const xpResult = await this._recalcAndSaveXP(userId);
@@ -586,7 +567,6 @@ class ChatController {
 
     generateUniversityReport = async (req, res) => {
         try {
-            // 1. Сначала собираем цифры из БД
             const stats = await db.query(`
                 SELECT 
                     (SELECT COUNT(*) FROM graduates) as total,
@@ -597,7 +577,6 @@ class ChatController {
             const { total, employed, salary } = stats.rows[0];
             const rate = total > 0 ? Math.round((employed / total) * 100) : 0;
 
-            // 2. Формируем промпт
             const prompt = `
                 Ты аналитик данных в университете. 
                 Проанализируй показатели:
@@ -611,7 +590,6 @@ class ChatController {
                 3. Совет студентам.
             `;
 
-            // 3. Спрашиваем AI (используем твой aiService)
             const aiResponse = await aiService.getCompletion([{ role: 'user', content: prompt }]);
 
             res.json({ report: aiResponse });

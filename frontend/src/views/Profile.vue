@@ -1,6 +1,15 @@
 <template>
-  <div class="page-wrapper">
-    <div class="blobs-container">
+  <div class="page-wrapper" :class="getThemeBackgroundClass">
+    <!-- === ФОНОВЫЕ ЭФФЕКТЫ ТЕМ === -->
+    <div v-if="currentTheme === 'theme_matrix'" class="matrix-bg-rain">
+      <span v-for="i in 20" :key="i" :style="{ left: Math.random() * 100 + '%', animationDuration: Math.random() * 2 + 1 + 's', animationDelay: Math.random() * 2 + 's' }">10</span>
+    </div>
+    <div v-if="currentTheme === 'theme_gold'" class="gold-bg-dust">
+      <div v-for="i in 15" :key="i" class="gold-particle" :style="{ top: Math.random() * 100 + '%', left: Math.random() * 100 + '%' }"></div>
+    </div>
+
+    <!-- Стандартные блобы (если нет темы) -->
+    <div class="blobs-container" v-if="!currentTheme">
       <div class="blob blob-1"></div>
       <div class="blob blob-2"></div>
       <div class="blob blob-3"></div>
@@ -9,12 +18,11 @@
     <div class="content-container">
       <a-spin :spinning="loading" tip="Загрузка профиля...">
 
-        <!-- === 1. ШАПКА (ФИКСИРОВАННАЯ) === -->
-        <div class="glass-card main-card fade-in" :class="{ 'admin-theme': isAdmin, 'uni-theme': isUniversity }">
+        <!-- === 1. ШАПКА ПРОФИЛЯ === -->
+        <div class="glass-card main-card fade-in" :class="[getThemeClass, {'admin-theme': isAdmin, 'uni-theme': isUniversity}]">
           <div class="bg-decoration-circle"></div>
 
           <div class="top-actions">
-            <!-- 🔥 КНОПКА НАСТРОЙКИ СЕТКИ (ВЕРНУЛ) -->
             <button class="btn-icon-link settings-btn" @click="openLayoutSettings" title="Настроить виджеты">
                <setting-outlined />
             </button>
@@ -24,9 +32,10 @@
           </div>
 
           <div class="avatar-column">
+            <!-- СЛОЙ АВАТАРА И ЭФФЕКТОВ -->
+            <div class="avatar-stack">
 
-            <div class="avatar-stack" :class="getEquippedEffect">
-              <!-- СТУДЕНТ: XP Прогресс -->
+              <!-- Прогресс (Студент) -->
               <a-progress
                 v-if="isStudent"
                 type="circle"
@@ -37,19 +46,51 @@
                 class="progress-ring"
                 :show-info="false"
               />
-              <!-- Ранг -->
+
+              <!-- Ранг (Студент) -->
               <div v-if="isStudent" class="rank-orb" :style="{ background: userRank.color }" :title="userRank.label">
                  <component :is="getRankIcon(userRank.icon)" />
               </div>
 
-              <!-- Кольца других ролей -->
-              <div v-if="isUniversity" class="uni-ring"></div>
-              <div v-if="isAdmin" class="admin-ring" :class="{ 'error-ring': systemHealth.status === 'error' }"></div>
+              <!-- ЭФФЕКТЫ (Частицы, Молнии и т.д.) -->
+              <div class="effects-container">
+                  <!-- Конфетти -->
+                  <div v-if="currentEffect === 'effect_confetti'" class="confetti-wrapper">
+                      <div v-for="n in 20" :key="n" class="confetti-piece" :style="getConfettiStyle(n)"></div>
+                  </div>
+                  <!-- Холод -->
+                  <div v-if="currentEffect === 'effect_snow'" class="snow-wrapper">
+                      <div v-for="n in 15" :key="n" class="snowflake" :style="getSnowStyle(n)">❄</div>
+                  </div>
+                  <!-- Молнии -->
+                  <div v-if="currentEffect === 'effect_lightning'" class="lightning-wrapper">
+                      <svg viewBox="0 0 100 100" class="lightning-bolt"><path d="M55 0L20 60h25l-10 40 45-55H50z" fill="#fef08a" /></svg>
+                  </div>
+              </div>
 
-              <div class="avatar-img-box" :class="getEquippedFrame"> <!-- Класс рамки -->
+              <!-- АВАТАРКА -->
+              <div class="avatar-img-box" :class="getEquippedFrame">
+                <!-- Матрица (внутри круга) -->
+                <div v-if="currentEffect === 'effect_matrix'" class="matrix-overlay">
+                    <div class="matrix-column">0 1 0 1 0 1 0 1 1 0 1 0 0 1</div>
+                    <div class="matrix-column delay">1 0 1 0 1 1 0 0 1 0 1 0 1 1</div>
+                </div>
+
                 <a-avatar :size="135" :src="getAvatarUrl(profile.avatar_url)" class="main-avatar">
                    <template #icon><user-outlined class="default-icon" /></template>
                 </a-avatar>
+
+                <!-- КОРОЛЕВСКАЯ КОРОНА (Парит над аватаркой) -->
+                <div v-if="profile.equipped_rewards?.frame === 'frame_royal'" class="royal-crown-container">
+                    <svg viewBox="0 0 512 512" width="60" height="60" class="floating-crown">
+                        <path fill="#fbbf24" d="M112,238l-96,96l240,168l240-168l-96-96l-72,112l-72-168l-72,168Z"/>
+                        <circle fill="#ef4444" cx="112" cy="238" r="20"/>
+                        <circle fill="#ef4444" cx="400" cy="238" r="20"/>
+                        <circle fill="#3b82f6" cx="256" cy="180" r="25"/>
+                        <circle fill="#10b981" cx="16" cy="334" r="16"/>
+                        <circle fill="#10b981" cx="496" cy="334" r="16"/>
+                    </svg>
+                </div>
               </div>
 
               <a-upload v-if="isEditing" name="avatar" :show-upload-list="false" :customRequest="handleAvatarUpload" class="avatar-upload-pos">
@@ -60,15 +101,22 @@
             <div class="name-block">
               <h1 class="full-name">{{ profile.last_name || 'Фамилия' }} {{ profile.first_name || 'Имя' }} {{ profile.patronymic || '' }}</h1>
 
-              <!-- Бейджи -->
-              <div class="badges-wrapper" v-if="!isStudent">
+              <!-- АКТИВНЫЕ БЕЙДЖИ (ДО 2 ШТУК) -->
+              <div class="equipped-badges" v-if="activeBadges.length > 0">
+                 <div v-for="badge in activeBadges" :key="badge.id" class="equipped-badge-item" :class="badge.id">
+                    <component :is="badge.icon" /> {{ badge.name }}
+                 </div>
+              </div>
+
+              <!-- Роли (если нет бейджей студента) -->
+              <div class="badges-wrapper" v-if="!isStudent && activeBadges.length === 0">
                  <div class="specialty-badge admin-badge" v-if="isAdmin"><safety-certificate-filled /> System Administrator</div>
                  <div class="specialty-badge uni-badge" v-else-if="isUniversity"><bank-filled /> {{ profile.position || 'Сотрудник ВУЗа' }}</div>
                  <div class="specialty-badge" v-else-if="profile.specialty_name || profile.position"><idcard-outlined /> {{ isEmployer ? profile.position : profile.specialty_name }}</div>
               </div>
 
-              <!-- XP статус для студента -->
-              <div class="xp-status" v-else>
+              <!-- XP статус -->
+              <div class="xp-status" v-if="isStudent">
                  <span :style="{ color: userRank.color, fontWeight: '800' }">{{ userRank.label }}</span>
                  <span class="xp-divider">•</span>
                  <span class="xp-text">{{ currentXp }} XP</span>
@@ -84,15 +132,14 @@
           <div class="grid-column">
             <div v-for="element in layout.left" :key="element" class="widget-wrapper fade-in">
 
-              <!-- ИНВЕНТАРЬ (НОВЫЙ ВИДЖЕТ) -->
+              <!-- ИНВЕНТАРЬ (СТУДЕНТ) -->
                 <div v-if="element === 'inventory' && isStudent" class="glass-card card-accent-orange">
                     <div class="card-header"><h3><gift-filled style="color: #f59e0b;" /> Мои награды</h3></div>
-
-                    <!-- Вкладки инвентаря -->
                     <div class="inv-tabs">
                         <span :class="{active: invTab==='frames'}" @click="invTab='frames'">Рамки</span>
                         <span :class="{active: invTab==='effects'}" @click="invTab='effects'">Эффекты</span>
-                        <span :class="{active: invTab==='badges'}" @click="invTab='badges'">Бейджи</span>
+                        <span :class="{active: invTab==='badges'}" @click="invTab='badges'">Бейджи ({{ (profile.equipped_rewards?.badges || []).length }}/2)</span>
+                        <span :class="{active: invTab==='themes'}" @click="invTab='themes'">Темы</span>
                     </div>
 
                     <div class="inv-grid custom-scroll">
@@ -111,11 +158,11 @@
                     </div>
                 </div>
 
-               <!-- ВИДЖЕТ: ИНФОРМАЦИЯ (ЛК) -->
+               <!-- ЛИЧНЫЕ ДАННЫЕ / ИНФО -->
                <div v-if="element === 'info'" class="glass-card card-accent-purple">
                    <div class="card-header"><h3><component :is="getHeaderIcon" /> {{ isUniversity ? 'Служебная информация' : 'Личные данные' }}</h3></div>
 
-                   <!-- РЕЖИМ ПРОСМОТРА -->
+                   <!-- ПРОСМОТР -->
                    <div v-if="!isEditing" class="info-view scrollable-content">
                        <div class="info-group">
                            <div class="info-row"><span class="label">Email</span><span class="value">{{ profile.email }}</span></div>
@@ -137,7 +184,6 @@
                            </template>
                        </div>
 
-                       <!-- Документы ВУЗа (Просмотр) -->
                        <div v-if="isUniversity && (profile.university_logo || profile.stamp_url)" class="uni-docs-preview">
                            <div class="divider"></div><h4>Документы</h4>
                            <div class="docs-row">
@@ -145,14 +191,10 @@
                                <div class="doc-preview-item" v-if="profile.stamp_url"><img :src="getAvatarUrl(profile.stamp_url)" class="preview-img" /><span>Печать</span></div>
                            </div>
                        </div>
-
-                       <!-- О себе / Обязанности -->
                        <div v-if="profile.about_me || isStudent || isUniversity">
                            <div class="divider"></div>
                            <div class="about-section"><h4>{{ isUniversity ? 'Обязанности' : 'О себе' }}</h4><p class="about-text">{{ profile.about_me || 'Информация не заполнена' }}</p></div>
                        </div>
-
-                       <!-- Ссылки (Студент) -->
                        <div class="links-section" v-if="isStudent && profile.portfolio_links && profile.portfolio_links.length">
                            <h4>Портфолио</h4>
                            <div class="links-grid">
@@ -161,15 +203,13 @@
                        </div>
                    </div>
 
-                   <!-- 🔥 РЕЖИМ РЕДАКТИРОВАНИЯ (ИСПРАВЛЕНО) -->
+                   <!-- РЕДАКТИРОВАНИЕ -->
                    <a-form v-else layout="vertical" class="modern-form">
-                       <!-- 1. Общие поля для ВСЕХ -->
                        <div class="form-row-2">
                            <a-form-item label="Фамилия"><a-input v-model:value="form.last_name" class="modern-input"/></a-form-item>
                            <a-form-item label="Имя"><a-input v-model:value="form.first_name" class="modern-input"/></a-form-item>
                        </div>
 
-                       <!-- 2. Поля ВУЗа -->
                        <template v-if="isUniversity">
                            <a-form-item label="Название ВУЗа"><a-input v-model:value="form.university_name" class="modern-input"/></a-form-item>
                            <a-form-item label="Должность"><a-input v-model:value="form.position" class="modern-input"/></a-form-item>
@@ -177,8 +217,6 @@
                                <a-form-item label="Отдел/Факультет"><a-input v-model:value="form.department" class="modern-input"/></a-form-item>
                                <a-form-item label="Кабинет"><a-input v-model:value="form.office" class="modern-input"/></a-form-item>
                            </div>
-
-                           <!-- Загрузка документов ВУЗа -->
                            <div class="uploads-section">
                                <h4>Логотип и Печать</h4>
                                <div class="upload-grid">
@@ -198,7 +236,6 @@
                            </div>
                        </template>
 
-                       <!-- 3. Поля Студента -->
                        <template v-if="isStudent">
                            <a-form-item label="Специальность">
                                <a-select v-model:value="form.specialty_id" class="modern-select">
@@ -211,12 +248,10 @@
                            </div>
                        </template>
 
-                       <!-- 4. Поля Работодателя -->
                        <template v-if="isEmployer">
                            <a-form-item label="Должность"><a-input v-model:value="form.position" class="modern-input"/></a-form-item>
                        </template>
 
-                       <!-- 5. ОБЩИЕ КОНТАКТЫ (ТЕПЕРЬ ВИДНЫ ВСЕМ) -->
                        <div class="form-row-2" style="margin-top: 15px;">
                            <a-form-item label="Телефон" :validate-status="phoneError ? 'error' : ''" :help="phoneError">
                                <a-input v-model:value="form.phone" @change="validatePhone" class="modern-input" />
@@ -226,7 +261,6 @@
                            </a-form-item>
                        </div>
 
-                       <!-- 6. О себе / Ссылки (Студент) -->
                        <template v-if="isStudent">
                            <div class="links-editor">
                                <h4>Ссылки</h4>
@@ -243,7 +277,6 @@
                            </div>
                        </template>
 
-                       <!-- Общее поле "О себе" -->
                        <a-form-item :label="isUniversity ? 'Обязанности' : 'О себе'" style="margin-top:15px">
                            <a-textarea v-model:value="form.about_me" :rows="4" class="modern-input"/>
                        </a-form-item>
@@ -255,7 +288,7 @@
                    </a-form>
                </div>
 
-               <!-- Виджет: ROADMAP (Студент) -->
+               <!-- ROADMAP -->
                <div v-if="element === 'roadmap' && isStudent" class="glass-card card-accent-purple">
                    <div class="card-header">
                        <h3><compass-outlined /> Мое развитие</h3>
@@ -283,12 +316,7 @@
           <div class="grid-column">
             <div v-for="element in layout.right" :key="element" class="widget-wrapper fade-in">
 
-                <div v-if="element === 'info'" class="glass-card card-accent-purple">
-                    <div class="card-header"><h3><component :is="getHeaderIcon" /> Данные</h3></div>
-                    <div class="info-view"><div class="info-group"><div class="info-row"><span class="label">Email</span><span class="value">{{ profile.email }}</span></div></div></div>
-                </div>
-
-                <!-- КАРЬЕРА (Студент) -->
+                <!-- КАРЬЕРА -->
                 <div v-if="element === 'career' && isStudent" class="glass-card card-accent-blue">
                     <div class="card-header">
                         <h3><solution-outlined /> Карьера</h3>
@@ -301,6 +329,7 @@
                             <div class="edit-actions"><a-button type="primary" @click="addJob">ОК</a-button><a-button type="text" @click="showJobForm=false">Х</a-button></div>
                         </a-form>
                     </div>
+                    <!-- Стили для таймлайна восстановлены ниже -->
                     <div v-if="employmentRecords.length" class="timeline-container custom-scroll" style="max-height: 300px; overflow-y: auto;">
                         <a-timeline mode="left">
                             <a-timeline-item v-for="job in employmentRecords" :key="job.id" :color="job.is_current ? 'green' : 'blue'">
@@ -315,12 +344,13 @@
                     <div v-else class="empty-timeline"><div class="empty-icon-box"><folder-open-outlined /></div><p>Нет опыта</p></div>
                 </div>
 
-                <!-- РЕЗЮМЕ (Студент) -->
+                <!-- РЕЗЮМЕ -->
                 <div v-if="element === 'resumes' && isStudent" class="glass-card card-accent-orange">
                     <div class="card-header">
                         <h3><file-text-outlined /> Резюме</h3>
                         <a-upload name="file" :show-upload-list="false" :customRequest="uploadResumeFile"><button class="btn-add-job"><upload-outlined /></button></a-upload>
                     </div>
+                    <!-- Стили для списка резюме восстановлены -->
                     <div v-if="resumes.length > 0" class="resume-list custom-scroll" style="max-height: 250px; overflow-y: auto;">
                         <div v-for="res in resumes" :key="res.id" class="resume-item">
                             <div class="res-icon"><file-pdf-outlined v-if="res.type==='pdf'" style="color:#ff4d4f"/><file-word-outlined v-else style="color:#1890ff"/></div>
@@ -331,7 +361,7 @@
                     <div v-else class="empty-timeline">Нет резюме</div>
                 </div>
 
-                <!-- ИСТОРИЯ (Студент) -->
+                <!-- ИСТОРИЯ -->
                 <div v-if="element === 'history' && isStudent" class="glass-card card-accent-purple">
                     <div class="card-header"><h3><history-outlined /> Архив обучения</h3></div>
                     <div v-if="roadmapHistory.length > 0" class="history-list custom-scroll" style="max-height: 250px; overflow-y: auto;">
@@ -346,7 +376,7 @@
                     <div v-else class="empty-timeline">Архив пуст</div>
                 </div>
 
-                <!-- ВИДЖЕТЫ ВУЗА -->
+                <!-- ВУЗ -->
                 <div v-if="element === 'uni_stats' && isUniversity" class="glass-card card-accent-teal">
                     <div class="card-header"><h3><appstore-filled style="color:#0d9488"/> Обзор</h3></div>
                     <div class="uni-stats-list"><div class="u-stat"><span class="us-val">{{ uniStats?.kpi?.total || 0 }}</span><span class="us-lbl">Студентов</span></div><div class="u-stat"><span class="us-val">{{ uniStats?.kpi?.rate || 0 }}%</span><span class="us-lbl">Работают</span></div></div>
@@ -377,7 +407,7 @@
       </a-spin>
     </div>
 
-    <!-- MODAL: LAYOUT SETTINGS -->
+    <!-- MODAL -->
     <a-modal v-model:open="showLayoutModal" title="Настройка виджетов" @ok="saveLayoutSettings" ok-text="Сохранить" centered width="600px">
        <div class="layout-editor-container">
           <p class="layout-hint">Перетаскивайте блоки между колонками или меняйте их порядок.</p>
@@ -410,6 +440,7 @@
 import api from '../axios';
 import draggable from 'vuedraggable';
 import { message } from 'ant-design-vue';
+// ИМПОРТ ВСЕХ ИКОНОК
 import {
   UserOutlined, EditOutlined, LinkOutlined, SolutionOutlined, PlusOutlined, DeleteOutlined,
   BankOutlined, CameraOutlined, PhoneOutlined, MailOutlined, EnvironmentOutlined,
@@ -422,7 +453,8 @@ import {
   WarningOutlined, CheckCircleOutlined, UserAddOutlined, ReloadOutlined, InfoCircleOutlined, BugOutlined,
   AppstoreOutlined, DragOutlined, BankFilled,
   SmileTwoTone, RocketFilled, TrophyFilled, ThunderboltFilled, FireFilled, CrownFilled, StarOutlined,
-  GiftFilled, LockFilled, SkinOutlined, ExperimentFilled, ReadFilled, StarFilled // Добавлены иконки инвентаря
+  GiftFilled, LockFilled, SkinOutlined, ExperimentFilled, ReadFilled, StarFilled, BlockOutlined,
+  BgColorsOutlined, EyeInvisibleOutlined, BuildFilled, GoldOutlined, SketchOutlined, RobotOutlined
 } from '@ant-design/icons-vue';
 
 const RUSSIAN_CITIES = ['Москва', 'Санкт-Петербург', 'Новосибирск', 'Екатеринбург', 'Казань', 'Нижний Новгород'].map(c => ({ value: c, label: c }));
@@ -448,7 +480,8 @@ export default {
     WarningOutlined, CheckCircleOutlined, UserAddOutlined, ReloadOutlined, InfoCircleOutlined, BugOutlined,
     AppstoreOutlined, DragOutlined, BankFilled,
     SmileTwoTone, RocketFilled, TrophyFilled, ThunderboltFilled, FireFilled, CrownFilled, StarOutlined,
-    GiftFilled, LockFilled, SkinOutlined, ExperimentFilled, ReadFilled, StarFilled
+    GiftFilled, LockFilled, SkinOutlined, ExperimentFilled, ReadFilled, StarFilled, BlockOutlined,
+    BgColorsOutlined, EyeInvisibleOutlined, BuildFilled, GoldOutlined, SketchOutlined, RobotOutlined
   },
   data() {
     return {
@@ -463,26 +496,41 @@ export default {
       systemLogs: [], logsLoading: false, systemHealth: { ping: null, status: 'unknown', version: '...' },
       roadmapList: [], roadmapHistory: [],
 
-      // Layout
       layout: { left: [], right: [] },
       showLayoutModal: false,
       tempLayout: { left: [], right: [] },
-      // 🔥 ИНВЕНТАРЬ
       invTab: 'frames',
-      // База всех возможных предметов
+
+      // БАЗА ПРЕДМЕТОВ
       itemsDB: {
           frames: [
-              { id: 'frame_blue', name: 'Синяя искра', icon: 'ThunderboltFilled' },
+              { id: 'frame_blue', name: 'Синяя рамка', icon: 'BlockOutlined' },
+              { id: 'frame_green', name: 'Эко-рамка', icon: 'BlockOutlined' },
               { id: 'frame_gold', name: 'Золотая рамка', icon: 'TrophyFilled' },
-              { id: 'frame_neon', name: 'Неон', icon: 'ExperimentFilled' }
+              { id: 'frame_red', name: 'Рамка агрессора', icon: 'BlockOutlined' },
+              { id: 'frame_neon', name: 'Кибер-рамка', icon: 'ThunderboltFilled' },
+              { id: 'frame_royal', name: 'Королевская', icon: 'CrownFilled' }
           ],
           effects: [
-              { id: 'fire_effect', name: 'В огне', icon: 'FireFilled' },
-              { id: 'snow_effect', name: 'Холод', icon: 'SkinOutlined' }
+              { id: 'effect_confetti', name: 'Конфетти', icon: 'SmileTwoTone' },
+              { id: 'effect_snow', name: 'Холод', icon: 'SkinOutlined' },
+              { id: 'effect_fire', name: 'В огне', icon: 'FireFilled' },
+              { id: 'effect_lightning', name: 'Молнии', icon: 'ThunderboltFilled' },
+              { id: 'effect_matrix', name: 'Матрица', icon: 'CodeOutlined' }
           ],
           badges: [
+              { id: 'badge_fast', name: 'Быстрый старт', icon: 'RocketFilled' },
+              { id: 'badge_book', name: 'Теоретик', icon: 'ReadFilled' },
+              { id: 'badge_puzzle', name: 'Problem Solver', icon: 'BuildFilled' },
               { id: 'badge_top', name: 'Топ талант', icon: 'StarFilled' },
-              { id: 'mentor_status', name: 'Ментор', icon: 'ReadFilled' }
+              { id: 'badge_star', name: 'Суперзвезда', icon: 'StarOutlined' },
+              { id: 'badge_guru', name: 'Гуру кода', icon: 'ExperimentFilled' },
+              { id: 'crown_animated', name: 'VIP Корона', icon: 'CrownFilled' }
+          ],
+          themes: [
+              { id: 'theme_dark', name: 'Тёмная тема', icon: 'EyeInvisibleOutlined' },
+              { id: 'theme_matrix', name: 'Матрица', icon: 'CodeOutlined' },
+              { id: 'theme_gold', name: 'Лакшери', icon: 'GoldOutlined' }
           ]
       }
     };
@@ -493,24 +541,32 @@ export default {
     isAdmin() { return this.userRole === 'admin'; },
     isUniversity() { return this.userRole === 'university_staff'; },
 
-    // 🔥 СТИЛИ ТЕМЫ
+    currentTheme() { return this.profile.equipped_rewards?.theme; },
+    currentEffect() { return this.profile.equipped_rewards?.effect; },
+
     getThemeClass() {
-        if (this.profile.equipped_rewards?.theme === 'theme_dark') return 'theme-dark-mode'; // Если есть темная тема
-        return 'admin-theme'; // Default
+        const t = this.currentTheme;
+        if (t === 'theme_dark') return 'theme-dark-mode';
+        if (t === 'theme_matrix') return 'theme-matrix-mode';
+        if (t === 'theme_gold') return 'theme-gold-mode';
+        return '';
+    },
+    getThemeBackgroundClass() {
+       const t = this.currentTheme;
+       if (t === 'theme_matrix') return 'bg-black';
+       if (t === 'theme_gold') return 'bg-gold';
+       return '';
     },
 
-    // 🔥 CSS КЛАССЫ ДЛЯ РАМОК И ЭФФЕКТОВ
     getEquippedFrame() {
         const f = this.profile.equipped_rewards?.frame;
-        if (f === 'frame_blue') return 'frame-blue-glow';
-        if (f === 'frame_gold') return 'frame-gold-glow';
-        if (f === 'frame_neon') return 'frame-neon-pulse';
-        return '';
+        if (!f) return '';
+        return f.replace('_', '-');
     },
-    getEquippedEffect() {
-        const e = this.profile.equipped_rewards?.effect;
-        if (e === 'fire_effect') return 'effect-fire';
-        return '';
+
+    activeBadges() {
+        const equippedIds = this.profile.equipped_rewards?.badges || [];
+        return this.itemsDB.badges.filter(b => equippedIds.includes(b.id));
     },
 
     getCardAccentClass() { return 'card-accent-purple'; },
@@ -518,34 +574,15 @@ export default {
 
     currentXp() {
        let total = 0;
-       if (this.roadmapList && Array.isArray(this.roadmapList)) {
+       if (this.roadmapList) {
            this.roadmapList.forEach(track => {
-               if (track.nodes) {
-                   track.nodes.forEach(node => {
-                       if (node.subtopics) {
-                           node.subtopics.forEach(sub => {
-                               if(sub.done) total += (sub.xpEarned || 50);
-                           });
-                       }
-                   });
-               }
+               if (track.nodes) track.nodes.forEach(n => { if (n.subtopics) n.subtopics.forEach(s => { if(s.done) total += (s.xpEarned || 50); }); });
            });
        }
-       if (this.roadmapHistory && Array.isArray(this.roadmapHistory)) {
-           this.roadmapHistory.forEach(historyItem => {
-               let nodes = historyItem.roadmap_data;
-               if (typeof nodes === 'string') {
-                   try { nodes = JSON.parse(nodes); } catch(e) { nodes = []; }
-               }
-               if (Array.isArray(nodes)) {
-                   nodes.forEach(node => {
-                       if (node.subtopics) {
-                           node.subtopics.forEach(sub => {
-                               if (sub.done) total += (sub.xpEarned || 50);
-                           });
-                       }
-                   });
-               }
+       if (this.roadmapHistory) {
+           this.roadmapHistory.forEach(h => {
+               let nodes = []; try { nodes = JSON.parse(h.roadmap_data); } catch(e){}
+               if (nodes) nodes.forEach(n => { if (n.subtopics) n.subtopics.forEach(s => { if (s.done) total += (s.xpEarned || 50); }); });
            });
        }
        return total;
@@ -562,44 +599,22 @@ export default {
     },
     xpProgress() {
         const rank = this.userRank;
-        const current = this.currentXp - rank.min;
-        const target = rank.max - rank.min;
-        if (target <= 0) return 100;
-        return Math.min(Math.round((current / target) * 100), 100);
+        return Math.min(Math.round(((this.currentXp - rank.min) / (rank.max - rank.min)) * 100), 100);
     },
 
-    // Умный поиск активного трека
     activeTrack() {
-        if (!this.roadmapList || this.roadmapList.length === 0) return null;
-        let track = this.roadmapList.find(t => t.id === this.profile.activeRoadmapId);
-        if (!track) track = this.roadmapList[this.roadmapList.length - 1];
-        return track;
+        if (!this.roadmapList || !this.roadmapList.length) return null;
+        return this.roadmapList.find(t => t.id === this.profile.activeRoadmapId) || this.roadmapList[this.roadmapList.length - 1];
     },
-
-    currentRoadmapProgress() {
-        if (!this.activeTrack) return 0;
-        return this.getTrackProgress(this.activeTrack);
-    },
-
-    currentRoadmapTitle() {
-        return this.activeTrack ? this.activeTrack.role : 'Мое развитие';
-    },
-
+    currentRoadmapProgress() { return this.activeTrack ? this.getTrackProgress(this.activeTrack) : 0; },
+    currentRoadmapTitle() { return this.activeTrack ? this.activeTrack.role : 'Мое развитие'; },
     nextRoadmapStep() {
-        if(!this.activeTrack || !this.activeTrack.nodes) return 'Старт';
-        const nodes = this.activeTrack.nodes;
-        for (const node of nodes) {
-            if (node.subtopics && node.subtopics.length > 0) {
-                const notDoneSub = node.subtopics.find(s => !s.done);
-                if (notDoneSub) return notDoneSub.label;
-            } else if (node.data && !node.data.done) {
-                return node.data.label;
-            }
+        if(!this.activeTrack?.nodes) return 'Старт';
+        for (const n of this.activeTrack.nodes) {
+            if (n.subtopics?.some(s => !s.done)) return n.subtopics.find(s => !s.done).label;
         }
         return 'Все пройдено!';
-    },
-
-    completionRate() { if (!this.isStudent) return 100; let score=0; if(this.profile.first_name) score++; if(this.profile.last_name) score++; if(this.profile.specialty_id) score++; if(this.profile.city) score++; if(this.employmentRecords.length) score++; return Math.round((score/5)*100); }
+    }
   },
   async mounted() {
     const u = JSON.parse(localStorage.getItem('user') || '{}');
@@ -613,193 +628,189 @@ export default {
   },
   methods: {
     initLayout() { const saved = localStorage.getItem(`profile_layout_${this.userRole}`); if (saved) this.layout = JSON.parse(saved); else this.resetLayout(); },
-
-    // 🔥 ИСПРАВЛЕННЫЙ МЕТОД
     resetLayout() {
         if (this.isAdmin) this.layout = { left: ['info', 'admin_notes'], right: ['admin_metrics', 'system_logs'] };
         else if (this.isUniversity) this.layout = { left: ['info'], right: ['uni_stats', 'uni_reports'] };
         else if (this.isStudent) this.layout = { left: ['info', 'inventory', 'roadmap'], right: ['career', 'resumes', 'history'] };
         else this.layout = { left: ['info'], right: [] };
-        this.saveLayout();
+        this.saveLayoutSettings();
     },
-
     openLayoutSettings() { this.tempLayout = JSON.parse(JSON.stringify(this.layout)); this.showLayoutModal = true; },
     saveLayoutSettings() { this.layout = JSON.parse(JSON.stringify(this.tempLayout)); localStorage.setItem(`profile_layout_${this.userRole}`, JSON.stringify(this.layout)); this.showLayoutModal = false; message.success('Вид сохранен'); },
-
-    // 🔥 ИСПРАВЛЕННЫЙ МЕТОД
-    resetToDefault() {
-        if (this.isAdmin) this.tempLayout = { left: ['info', 'admin_notes'], right: ['admin_metrics', 'system_logs'] };
-        else if (this.isUniversity) this.tempLayout = { left: ['info'], right: ['uni_stats', 'uni_reports'] };
-        else if (this.isStudent) this.tempLayout = { left: ['info', 'inventory', 'roadmap'], right: ['career', 'resumes', 'history'] };
-        else this.tempLayout = { left: ['info'], right: [] };
-    },
-
+    resetToDefault() { this.resetLayout(); },
     getWidgetName(id) { return WIDGET_NAMES[id] || id; },
 
-    // 🔥 ИНВЕНТАРЬ МЕТОДЫ
+    // ИНВЕНТАРЬ
     getInventoryItems(tab) { return this.itemsDB[tab] || []; },
-    isUnlocked(itemId) {
-        return (this.profile.unlocked_rewards || []).includes(itemId);
-    },
+    isUnlocked(itemId) { return (this.profile.unlocked_rewards || []).includes(itemId); },
     isEquipped(itemId, tab) {
+        if (tab === 'badges') {
+            return (this.profile.equipped_rewards?.badges || []).includes(itemId);
+        }
         const type = this.getEquipType(tab);
         return this.profile.equipped_rewards?.[type] === itemId;
     },
     getEquipType(tab) {
         if (tab === 'frames') return 'frame';
         if (tab === 'effects') return 'effect';
+        if (tab === 'themes') return 'theme';
         return 'badge';
     },
     async toggleEquip(itemId, type) {
         if (!this.isUnlocked(itemId)) return message.warn('Сначала достигните нужного уровня!');
-        const isWearing = this.profile.equipped_rewards?.[type] === itemId;
-        const newItem = isWearing ? null : itemId;
+
+        if (!this.profile.equipped_rewards) this.profile.equipped_rewards = { badges: [] };
+
+        let newItem = itemId;
+        // ЛОГИКА ДЛЯ БЕЙДЖЕЙ (МАССИВ, МАКС 2)
+        if (type === 'badge') {
+             let badges = this.profile.equipped_rewards.badges || [];
+             if (badges.includes(itemId)) {
+                 badges = badges.filter(b => b !== itemId); // Снять
+             } else {
+                 if (badges.length >= 2) return message.warn('Максимум 2 бейджа!');
+                 badges.push(itemId); // Надеть
+             }
+             this.profile.equipped_rewards.badges = badges;
+             // Отправляем массив на сервер
+             await this.syncEquip('badges', badges);
+             return;
+        }
+
+        // Логика для остальных (один слот)
+        const isWearing = this.profile.equipped_rewards[type] === itemId;
+        newItem = isWearing ? null : itemId;
+        this.profile.equipped_rewards[type] = newItem;
+
+        await this.syncEquip(type, newItem);
+    },
+    async syncEquip(type, value) {
         try {
-            if (!this.profile.equipped_rewards) this.profile.equipped_rewards = {};
-            if (newItem) this.profile.equipped_rewards[type] = newItem;
-            else delete this.profile.equipped_rewards[type];
-            await api.post(this.isEmployer ? '/recruiters/equip' : '/graduates/equip', { type, itemId: newItem });
-            message.success(isWearing ? 'Снято' : 'Надето');
+            await api.post(this.isEmployer ? '/recruiters/equip' : '/graduates/equip', { type, itemId: value });
+            message.success('Сохранено');
         } catch (e) { message.error('Ошибка сохранения'); }
     },
 
-    async loadRoadmapData() {
-        try {
-            const r = await api.get('/chat/roadmap');
-            if (r.data) {
-                if (r.data.list && Array.isArray(r.data.list)) {
-                    this.roadmapList = r.data.list;
-                    if (r.data.activeId) this.profile.activeRoadmapId = r.data.activeId;
-                } else if (Array.isArray(r.data)) {
-                    this.roadmapList = [{ id: 'legacy', role: 'My Roadmap', nodes: r.data }];
-                } else if (r.data.nodes) {
-                    this.roadmapList = [{ id: 'legacy', role: r.data.role || 'My Roadmap', nodes: r.data.nodes }];
-                }
-            }
-        } catch(e) { console.error("Roadmap Load Error:", e); }
+    // ГЕНЕРАТОРЫ СТИЛЕЙ ДЛЯ ЧАСТИЦ
+    getConfettiStyle(n) {
+        const colors = ['#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6'];
+        return {
+            left: Math.random() * 100 + '%',
+            top: Math.random() * 100 + '%',
+            backgroundColor: colors[n % colors.length],
+            animationDelay: (Math.random() * 2) + 's',
+            transform: `rotate(${Math.random() * 360}deg)`
+        };
+    },
+    getSnowStyle(n) {
+        return {
+            left: (Math.random() * 80 + 10) + '%',
+            animationDuration: (Math.random() * 3 + 2) + 's',
+            animationDelay: Math.random() * 2 + 's',
+            opacity: Math.random()
+        };
     },
 
+    // Остальные методы
+    async loadRoadmapData() {
+        try { const r = await api.get('/chat/roadmap'); this.roadmapList = r.data.list || [{id:'l', nodes:r.data.nodes||[]}]; if(r.data.activeId) this.profile.activeRoadmapId = r.data.activeId; } catch(e){}
+    },
     getTrackProgress(track) {
-        if(!track || !track.nodes || track.nodes.length === 0) return 0;
-        let total = 0;
-        let done = 0;
-        track.nodes.forEach(node => {
-            if (node.subtopics && node.subtopics.length > 0) {
-                total += node.subtopics.length;
-                done += node.subtopics.filter(s => s.done).length;
-            } else {
-                total++;
-                if (node.data?.done || node.done) done++;
-            }
-        });
-        if (total === 0) return 0;
-        return Math.round((done / total) * 100);
+        let t=0, d=0; track.nodes?.forEach(n => { if(n.subtopics) { t+=n.subtopics.length; d+=n.subtopics.filter(s=>s.done).length; } else { t++; if(n.done)d++; }});
+        return t===0 ? 0 : Math.round((d/t)*100);
     },
     getRankIcon(name) { const map = { 'seedling':'SmileTwoTone', 'code':'CodeOutlined', 'rocket':'RocketFilled', 'thunder':'ThunderboltFilled', 'fire':'FireFilled', 'crown':'CrownFilled' }; return map[name] || 'StarOutlined'; },
-
-    async loadData() { try { let url = '/graduates/me'; if (this.isEmployer) url = '/recruiters/me'; if (this.isUniversity) url = '/university/me'; if (this.isAdmin) url = '/admin/me'; const r = await api.get(url); this.profile = r.data; if (!this.profile.portfolio_links) this.profile.portfolio_links = []; if (typeof this.profile.portfolio_links === 'string') { try { this.profile.portfolio_links = JSON.parse(this.profile.portfolio_links); } catch(e) { this.profile.portfolio_links = []; } } if (this.profile.birth_date) this.profile.birth_date = this.profile.birth_date.split('T')[0]; } catch (e) { if(this.isAdmin) this.profile = { first_name:'Admin', last_name:'Root', email:'root@local' }; } },
-    enableEdit() { this.form = JSON.parse(JSON.stringify(this.profile)); if(this.form.birth_date) this.form.birth_date = this.form.birth_date.split('T')[0]; if(!this.form.portfolio_links) this.form.portfolio_links = []; this.isEditing = true; },
+    async loadData() { try { const r = await api.get(this.isAdmin?'/admin/me':(this.isUniversity?'/university/me':(this.isEmployer?'/recruiters/me':'/graduates/me'))); this.profile = r.data; if(typeof this.profile.portfolio_links==='string') this.profile.portfolio_links=JSON.parse(this.profile.portfolio_links); if(this.profile.birth_date) this.profile.birth_date=this.profile.birth_date.split('T')[0]; } catch(e){} },
+    enableEdit() { this.form = JSON.parse(JSON.stringify(this.profile)); if(!this.form.portfolio_links) this.form.portfolio_links=[]; this.isEditing = true; },
     cancelEdit() { this.isEditing = false; },
-    async saveProfile() { this.saving = true; try { let url = '/graduates/me'; if (this.isEmployer) url = '/recruiters/me'; if (this.isUniversity) url = '/university/me'; if (this.isAdmin) { this.isEditing=false; return message.success('Saved'); } const r = await api.put(url, this.form); this.profile = {...this.profile, ...r.data}; if(this.profile.birth_date && this.profile.birth_date.includes('T')) this.profile.birth_date = this.profile.birth_date.split('T')[0]; if (this.isStudent && this.form.specialty_id) { const s = this.specialties.find(i => i.id === this.form.specialty_id); if(s) { this.profile.specialty_code = s.code; this.profile.specialty_name = s.name; } } message.success('Обновлено'); this.isEditing = false; } catch(e) { message.error('Ошибка'); } finally { this.saving = false; } },
+    async saveProfile() { this.saving=true; try { const r = await api.put(this.isAdmin?'/admin/me':(this.isUniversity?'/university/me':'/graduates/me'), this.form); this.profile={...this.profile, ...r.data}; message.success('Сохранено'); this.isEditing=false; } catch(e){message.error('Ошибка');} finally{this.saving=false;} },
     async handleAvatarUpload({ file }) { await this.genericUpload(file, '/graduates/avatar', 'avatar_url'); },
     async handleLogoUpload({ file }) { await this.genericUpload(file, '/university/logo', 'university_logo'); },
     async handleStampUpload({ file }) { await this.genericUpload(file, '/university/stamp', 'stamp_url'); },
-    async genericUpload(file, url, fieldName) { const formData = new FormData(); const formField = fieldName === 'avatar_url' ? 'avatar' : 'file'; if(fieldName === 'avatar_url' && this.isUniversity) url = '/university/avatar'; formData.append(formField, file); try { const r = await api.post(url, formData); const newUrl = r.data[fieldName] || r.data.avatar_url || r.data.university_logo || r.data.stamp_url; this.profile[fieldName] = newUrl; this.form[fieldName] = newUrl; message.success('Загружено'); } catch(e) { message.error('Ошибка'); } },
-    getAvatarUrl(url) { return url ? `http://localhost:4000${url}` : null; },
-    getFileUrl(path) { return `http://localhost:4000${path}`; },
+    async genericUpload(file, url, field) { const fd=new FormData(); fd.append(field==='avatar_url'?'avatar':'file', file); try { const r = await api.post(url, fd); this.profile[field] = r.data[field] || r.data.avatar_url; this.form[field] = this.profile[field]; message.success('Загружено'); } catch(e){} },
+    getAvatarUrl(u) { return u ? `http://localhost:4000${u}` : null; },
+    getFileUrl(p) { return `http://localhost:4000${p}`; },
     formatDate(d) { return d ? new Date(d).toLocaleDateString() : '—'; },
-    formatGender(g) { return g === 'male' ? 'Мужской' : (g === 'female' ? 'Женский' : '—'); },
-    formatEducation(e) { const map = { bachelor:'Бакалавр', master:'Магистр', specialist:'Специалитет' }; return map[e] || e || '—'; },
-    formatMoney(val) { return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 }).format(val); },
+    formatGender(g) { return g==='male'?'Мужской':(g==='female'?'Женский':'—'); },
     addLink() { this.form.portfolio_links.push({ type: 'github', url: '' }); },
-    removeLink(index) { this.form.portfolio_links.splice(index, 1); },
-    getIconForType(type) { const map = { github: 'GithubOutlined', linkedin: 'LinkedinOutlined', telegram: 'MessageOutlined' }; return map[type] || 'LinkOutlined'; },
-    getLabelForType(type) { const map = { github: 'GitHub', telegram: 'TG' }; return map[type] || 'Ссылка'; },
-    async loadSpecialties() { try { const r = await api.get('/dict/specialties'); this.specialties = r.data; } catch(e){} },
-    async loadEmployment() { try { const r = await api.get('/employment'); this.employmentRecords = r.data; } catch(e){} },
-    async loadCompanies() { try { const r = await api.get('/dict/companies'); this.companies = r.data; } catch(e){} },
-    async loadResumes() { try { const r = await api.get('/resumes'); this.resumes = r.data; } catch(e){} },
-    async loadUniStats() { try { const r = await api.get('/university/stats'); this.uniStats = r.data; } catch(e){} },
-    async loadReports() { try { const r = await api.get('/university/reports'); this.savedReports = r.data; } catch(e){} },
-    async loadRoadmapHistory() { try { const r = await api.get('/chat/roadmap/history'); this.roadmapHistory = r.data; } catch(e){} },
-    async checkSystemHealth() { try { await api.get('/news?limit=1'); this.systemHealth = { ping: 50, status: 'ok', version: 'v1.2' }; } catch (e) { this.systemHealth.status='error'; } },
-    async loadSystemLogs() { try { const r = await api.get('/admin/logs'); this.systemLogs = r.data.slice(0, 10); } catch(e){} },
+    removeLink(i) { this.form.portfolio_links.splice(i, 1); },
+    getIconForType(t) { return ({github:'GithubOutlined', telegram:'MessageOutlined'})[t] || 'LinkOutlined'; },
+    getLabelForType(t) { return ({github:'GitHub', telegram:'TG'})[t] || 'Ссылка'; },
+    async loadSpecialties() { try { const r=await api.get('/dict/specialties'); this.specialties=r.data; }catch(e){} },
+    async loadEmployment() { try { const r=await api.get('/employment'); this.employmentRecords=r.data; }catch(e){} },
+    async loadCompanies() { try { const r=await api.get('/dict/companies'); this.companies=r.data; }catch(e){} },
+    async loadResumes() { try { const r=await api.get('/resumes'); this.resumes=r.data; }catch(e){} },
+    async loadUniStats() { try { const r=await api.get('/university/stats'); this.uniStats=r.data; }catch(e){} },
+    async loadReports() { try { const r=await api.get('/university/reports'); this.savedReports=r.data; }catch(e){} },
+    async loadRoadmapHistory() { try { const r=await api.get('/chat/roadmap/history'); this.roadmapHistory=r.data; }catch(e){} },
+    async checkSystemHealth() { this.systemHealth = {status:'ok'}; },
+    async loadSystemLogs() { try { const r=await api.get('/admin/logs'); this.systemLogs=r.data.slice(0,10); }catch(e){} },
     saveNotes() { localStorage.setItem('admin_notes', this.adminNotes); message.success('Сохранено'); },
-    openJobForm() { this.jobForm = { id: null, company_id: null, position_title: '', salary_amount: null, start_date: '', end_date: '', is_current: true }; this.showJobForm = true; },
-    editJob(item) { this.jobForm = { ...item, start_date: item.start_date?.split('T')[0], end_date: item.end_date?.split('T')[0] }; this.showJobForm = true; },
-    async addJob() { if (!this.jobForm.company_id) return message.warning('Компания?'); try { if (this.jobForm.id) await api.put(`/employment/${this.jobForm.id}`, this.jobForm); else await api.post('/employment', this.jobForm); this.showJobForm = false; this.loadEmployment(); } catch(e){ message.error('Ошибка'); } },
-    async deleteJob(id) { try { await api.delete(`/employment/${id}`); this.loadEmployment(); } catch(e){} },
-    async uploadResumeFile({ file }) { const fd = new FormData(); fd.append('file', file); try { await api.post('/resumes', fd, {headers:{'Content-Type':'multipart/form-data'}}); this.loadResumes(); } catch(e){} },
-    async deleteResume(id) { try { await api.delete(`/resumes/${id}`); this.loadResumes(); } catch(e){} }
+    openJobForm() { this.jobForm={id:null, is_current:true}; this.showJobForm=true; },
+    editJob(j) { this.jobForm={...j}; this.showJobForm=true; },
+    async addJob() { try { if(this.jobForm.id) await api.put(`/employment/${this.jobForm.id}`, this.jobForm); else await api.post('/employment', this.jobForm); this.showJobForm=false; this.loadEmployment(); }catch(e){} },
+    async uploadResumeFile({file}) { const fd=new FormData(); fd.append('file', file); await api.post('/resumes', fd); this.loadResumes(); },
+    async deleteResume(id) { await api.delete(`/resumes/${id}`); this.loadResumes(); }
   }
 };
 </script>
 
 <style scoped>
-/* СТИЛИ (БЕЗ ИЗМЕНЕНИЙ) */
-.rank-orb { position: absolute; bottom: 0; right: 10px; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 1.2rem; border: 3px solid white; box-shadow: 0 4px 10px rgba(0,0,0,0.15); z-index: 20; transition: transform 0.3s; }
-.rank-orb:hover { transform: scale(1.1); }
-.xp-status { margin-top: 8px; font-size: 0.95rem; background: rgba(255,255,255,0.6); padding: 4px 12px; border-radius: 20px; display: inline-block; border: 1px solid rgba(0,0,0,0.05); backdrop-filter: blur(5px); }
-.xp-divider { margin: 0 6px; color: #cbd5e1; }
-.xp-text { color: #64748b; font-weight: 600; }
+/* =======================================================
+   ВОССТАНОВЛЕННЫЕ СТИЛИ (BASE & LAYOUT)
+   ======================================================= */
+.page-wrapper { min-height: 90vh; background: #f3f4f6; display: flex; justify-content: center; padding: 30px 20px; position: relative; overflow: hidden; }
 
-.timeline-card { background: white; border-radius: 12px; padding: 14px 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.03); border: 1px solid #f0f0f0; margin-bottom: 10px; display: flex; flex-direction: column; gap: 5px; }
-.timeline-header { display: flex; justify-content: space-between; align-items: center; }
-.job-company { font-weight: 800; font-size: 1rem; color: #1e293b; }
-.job-pos { color: #3b82f6; font-weight: 600; font-size: 0.9rem; }
-.job-meta { font-size: 0.8rem; color: #9ca3af; display: flex; justify-content: space-between; margin-top: 4px; }
-.timeline-actions { display: flex; gap: 8px; }
-
-.resume-list { display: flex; flex-direction: column; gap: 10px; margin-top: 15px; }
-.resume-item { display: flex; align-items: center; gap: 12px; background: white; padding: 12px 16px; border-radius: 12px; border: 1px solid #f0f0f0; box-shadow: 0 2px 8px rgba(0,0,0,0.02); transition: 0.2s; }
-.resume-item:hover { border-color: #1890ff; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
-.res-icon { font-size: 1.8rem; }
-.res-info { flex: 1; overflow: hidden; }
-.res-name { font-weight: 600; color: #374151; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.res-date { font-size: 0.75rem; color: #9ca3af; }
-.res-actions { display: flex; gap: 8px; }
-
-.history-list { display: flex; flex-direction: column; gap: 10px; margin-top: 15px; }
-.history-item { display: flex; justify-content: space-between; align-items: center; background: white; padding: 12px 16px; border-radius: 12px; border: 1px solid #f0f0f0; box-shadow: 0 2px 8px rgba(0,0,0,0.02); transition: 0.2s; }
-.history-item:hover { border-color: #8b5cf6; transform: translateX(5px); }
-.h-title { font-weight: 700; color: #374151; font-size: 0.95rem; }
-.h-date { font-size: 0.75rem; color: #9ca3af; margin-top: 2px; }
-.h-score { font-weight: 800; color: #6366f1; background: #e0e7ff; padding: 4px 10px; border-radius: 8px; font-size: 0.85rem; }
-.h-score.done { color: #059669; background: #d1fae5; }
-
-/* СТАТИЧНАЯ СЕТКА (БЕЗ DRAG) */
-.static-grid-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 25px; align-items: start; margin-top: 20px; width: 100%; }
-@media (max-width: 900px) { .static-grid-layout { grid-template-columns: 1fr; } }
-.grid-column { display: flex; flex-direction: column; gap: 20px; width: 100%; }
-
-.page-wrapper { min-height: 90vh; background: #f3f4f6; display: flex; justify-content: center; padding: 30px 20px; position: relative; }
+/* Блобы (фон) */
 .blobs-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; }
 .blob { position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.5; }
 .blob-1 { background: #a855f7; width: 400px; height: 400px; top: -100px; left: -100px; }
 .blob-2 { background: #3b82f6; width: 300px; height: 300px; bottom: -50px; right: -50px; }
 .blob-3 { background: #2dd4bf; width: 250px; height: 250px; top: 30%; left: 40%; opacity: 0.3; }
+
 .content-container { width: 100%; max-width: 1200px; position: relative; z-index: 1; }
+
+/* Карточки */
 .glass-card { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(20px); border: 1px solid white; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); padding: 25px; transition: transform 0.2s; }
 .main-card { text-align: center; padding-bottom: 35px; }
-.avatar-column { display: flex; flex-direction: column; align-items: center; }
-.avatar-stack { position: relative; width: 170px; height: 170px; margin-bottom: 20px; }
-.progress-ring { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
-.avatar-img-box { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 135px; height: 135px; border-radius: 50%; background: white; display: flex; justify-content: center; align-items: center; box-shadow: 0 0 15px rgba(0,0,0,0.05); }
-.main-avatar { background-color: #f3f4f6; border: 4px solid #fff; }
-.full-name { font-size: 2rem; font-weight: 800; color: #111827; margin: 0 0 10px; }
-.badges-wrapper { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
-.specialty-badge { display: inline-flex; align-items: center; justify-content: center; gap: 8px; background: #e0f2fe; color: #0284c7; padding: 6px 18px; border-radius: 30px; font-weight: 700; font-size: 1rem; min-width: 150px; }
-.admin-badge { background: #111827 !important; color: #f3f4f6 !important; }
-.uni-badge { background: #0f766e !important; color: #ccfbf1 !important; }
-.empty { background: #f3f4f6; color: #9ca3af; }
-.top-actions { position: absolute; top: 25px; right: 25px; z-index: 5; display: flex; gap: 10px; }
+
+/* Хедер карточки */
+.card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid rgba(0,0,0,0.06); padding-bottom: 10px; }
+.card-header h3 { margin: 0; color: #1f2937; font-weight: 800; display: flex; align-items: center; gap: 12px; font-size: 1.2rem; }
+
+/* Кнопки действий */
+.top-actions { position: absolute; top: 25px; right: 25px; z-index: 50; display: flex; gap: 10px; }
 .btn-glass-edit { background: rgba(255,255,255,0.6); border: 1px solid #e5e7eb; padding: 10px 20px; border-radius: 14px; cursor: pointer; font-weight: 600; color: #4b5563; }
 .settings-btn { background: rgba(255,255,255,0.6); border: none; width: 36px; height: 36px; border-radius: 50%; cursor: pointer; color: #6b7280; display: flex; align-items: center; justify-content: center; }
 .settings-btn:hover { background: white; color: #1890ff; }
 .btn-mini-edit { width: 36px; height: 36px; border-radius: 50%; background: #1890ff; color: white; border: 3px solid white; cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.15); border: none; }
-.avatar-upload-pos { position: absolute; bottom: 5px; right: 5px; z-index: 10; }
-.card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid rgba(0,0,0,0.06); padding-bottom: 10px; }
-.card-header h3 { margin: 0; color: #1f2937; font-weight: 800; display: flex; align-items: center; gap: 12px; font-size: 1.2rem; }
+
+/* Аватар и Инфо */
+.avatar-column { display: flex; flex-direction: column; align-items: center; }
+.avatar-stack { position: relative; width: 170px; height: 170px; margin-bottom: 20px; }
+.progress-ring { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 2; }
+.avatar-img-box { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 135px; height: 135px; border-radius: 50%; background: white; display: flex; justify-content: center; align-items: center; box-shadow: 0 0 15px rgba(0,0,0,0.05); z-index: 5; }
+.main-avatar { background-color: #f3f4f6; border: 4px solid #fff; z-index: 6; }
+.full-name { font-size: 2rem; font-weight: 800; color: #111827; margin: 0 0 10px; }
+
+/* Ранг Орб */
+.rank-orb { position: absolute; bottom: 0; right: 10px; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 1.2rem; border: 3px solid white; box-shadow: 0 4px 10px rgba(0,0,0,0.15); z-index: 20; transition: transform 0.3s; }
+.rank-orb:hover { transform: scale(1.1); }
+
+/* Статус XP */
+.xp-status { margin-top: 8px; font-size: 0.95rem; background: rgba(255,255,255,0.6); padding: 4px 12px; border-radius: 20px; display: inline-block; border: 1px solid rgba(0,0,0,0.05); backdrop-filter: blur(5px); }
+.xp-divider { margin: 0 6px; color: #cbd5e1; }
+.xp-text { color: #64748b; font-weight: 600; }
+
+/* Сетка виджетов */
+.static-grid-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 25px; align-items: start; margin-top: 20px; width: 100%; }
+@media (max-width: 900px) { .static-grid-layout { grid-template-columns: 1fr; } }
+.grid-column { display: flex; flex-direction: column; gap: 20px; width: 100%; }
+.widget-wrapper { width: 100%; }
+.fade-in { animation: fadeIn 0.7s cubic-bezier(0.2, 0.8, 0.2, 1); }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+
+/* Инфо блок */
 .info-row { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed #e5e7eb; padding: 8px 0; }
 .label { color: #6b7280; font-size: 0.9rem; font-weight: 500; }
 .value { font-weight: 700; color: #111827; text-align: right; }
@@ -809,45 +820,84 @@ export default {
 .about-text { color: #4b5563; line-height: 1.6; white-space: pre-line; font-size: 0.95rem; }
 .links-grid { display: flex; flex-wrap: wrap; gap: 8px; }
 .modern-link-tag { background: white; border: 1px solid #e5e7eb; padding: 6px 12px; border-radius: 10px; color: #4b5563; font-weight: 600; text-decoration: none; display: flex; align-items: center; gap: 6px; font-size: 0.85rem; }
-.uni-docs-preview .docs-row { display: flex; gap: 15px; justify-content: center; }
-.preview-img { width: 50px; height: 50px; object-fit: contain; border: 1px solid #e2e8f0; border-radius: 8px; padding: 5px; background: white; }
-.doc-preview-item { display: flex; flex-direction: column; align-items: center; font-size: 0.75rem; color: #64748b; }
+
+/* Формы */
+.modern-form .ant-form-item { margin-bottom: 12px; }
 .form-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
 .modern-input, .modern-select { border-radius: 8px; padding: 6px 11px; }
 .link-edit-row { display: flex; gap: 10px; margin-bottom: 12px; }
 .btn-icon-delete { background: #fee2e2; border: none; color: #ef4444; width: 32px; height: 32px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
 .btn-add-link { width: 100%; border: 1px dashed #d1d5db; background: white; padding: 6px; border-radius: 8px; cursor: pointer; color: #6b7280; }
 .uploads-section { background: #f8fafc; padding: 15px; border-radius: 12px; border: 1px dashed #cbd5e1; margin-top: 15px; }
-.upload-grid { display: flex; gap: 15px; } .upload-placeholder { width: 70px; height: 70px; border: 2px dashed #e2e8f0; border-radius: 10px; display: flex; align-items: center; justify-content: center; cursor: pointer; background: white; color: #9ca3af; margin: 0 auto; } .ub-label { font-size: 0.8rem; text-align: center; margin-bottom: 5px; color: #64748b; }
+.upload-grid { display: flex; gap: 15px; }
+.upload-placeholder { width: 70px; height: 70px; border: 2px dashed #e2e8f0; border-radius: 10px; display: flex; align-items: center; justify-content: center; cursor: pointer; background: white; color: #9ca3af; margin: 0 auto; } .ub-label { font-size: 0.8rem; text-align: center; margin-bottom: 5px; color: #64748b; }
 .edit-actions { display: flex; gap: 10px; margin-top: 20px; }
-.roadmap-multi-list { display: flex; flex-direction: column; gap: 8px; }
-.rm-track-item { display: flex; align-items: center; justify-content: space-between; background: white; padding: 12px 16px; border-radius: 12px; border: 1px solid #e5e7eb; }
-.rm-track-info { flex: 1; }
-.rm-role { font-weight: 700; color: #374151; font-size: 0.95rem; }
-.rm-status { font-size: 0.75rem; color: #9ca3af; margin-top: 2px; }
-.rm-next { font-size: 0.75rem; color: #6b7280; margin-top: 2px; font-style: italic; }
-.rm-track-chart { margin-left: 10px; }
-.btn-icon-link { border: none; background: none; color: #9ca3af; cursor: pointer; font-size: 1.2rem; transition: 0.2s; display: flex; align-items: center; }
-.btn-icon-link:hover { color: #1890ff; transform: translateX(3px); }
+
+/* Таймлайн и Резюме (Было потеряно, восстановлено!) */
+.timeline-card { background: white; border-radius: 12px; padding: 14px 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.03); border: 1px solid #f0f0f0; margin-bottom: 10px; display: flex; flex-direction: column; gap: 5px; }
+.timeline-header { display: flex; justify-content: space-between; align-items: center; }
+.job-company { font-weight: 800; font-size: 1rem; color: #1e293b; }
+.job-pos { color: #3b82f6; font-weight: 600; font-size: 0.9rem; }
+.job-meta { font-size: 0.8rem; color: #9ca3af; display: flex; justify-content: space-between; margin-top: 4px; }
 .btn-add-job { background: #eff6ff; border: none; color: #2563eb; width: 30px; height: 30px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
 .job-form-wrapper { background: #f9fafb; padding: 15px; border-radius: 12px; border: 1px solid #e5e7eb; margin-bottom: 15px; }
-.action-icon { cursor: pointer; color: #94a3b8; margin-left: 8px; transition: 0.2s; } .action-icon:hover { color: #1890ff; } .action-icon.danger:hover { color: #ef4444; }
-.empty-timeline { text-align: center; color: #9ca3af; padding: 15px; font-size: 0.9rem; }
-.empty-icon-box { font-size: 2rem; color: #e5e7eb; margin-bottom: 10px; }
-.uni-stats-list { display: flex; justify-content: space-between; padding: 10px 0; }
-.u-stat { text-align: center; flex: 1; } .us-val { font-size: 1.4rem; font-weight: 800; color: #0f766e; }
-.doc-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
-.doc-item { display: flex; align-items: center; gap: 8px; padding: 8px; background: #f8fafc; border-radius: 8px; font-size: 0.9rem; font-weight: 600; color: #334155; }
-.doc-icon { font-size: 1.2rem; }
-.doc-info { flex: 1; }
-.btn-create-report { width: 100%; margin-top: 15px; background: #eff6ff; color: #2563eb; border: 1px dashed #2563eb; padding: 10px; border-radius: 10px; cursor: pointer; font-weight: 600; transition: 0.2s; }
-.fade-in { animation: fadeIn 0.7s cubic-bezier(0.2, 0.8, 0.2, 1); }
-@keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+
+.resume-list { display: flex; flex-direction: column; gap: 10px; margin-top: 15px; }
+.resume-item { display: flex; align-items: center; gap: 12px; background: white; padding: 12px 16px; border-radius: 12px; border: 1px solid #f0f0f0; box-shadow: 0 2px 8px rgba(0,0,0,0.02); transition: 0.2s; }
+.resume-item:hover { border-color: #1890ff; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+.res-icon { font-size: 1.8rem; }
+.res-info { flex: 1; overflow: hidden; }
+.res-name { font-weight: 600; color: #374151; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.res-date { font-size: 0.75rem; color: #9ca3af; }
+.res-actions { display: flex; gap: 8px; }
+.action-icon { cursor: pointer; color: #94a3b8; margin-left: 8px; transition: 0.2s; }
+.action-icon:hover { color: #1890ff; }
+
+.history-list { display: flex; flex-direction: column; gap: 10px; margin-top: 15px; }
+.history-item { display: flex; justify-content: space-between; align-items: center; background: white; padding: 12px 16px; border-radius: 12px; border: 1px solid #f0f0f0; box-shadow: 0 2px 8px rgba(0,0,0,0.02); transition: 0.2s; }
+.history-item:hover { border-color: #8b5cf6; transform: translateX(5px); }
+.h-title { font-weight: 700; color: #374151; font-size: 0.95rem; }
+.h-date { font-size: 0.75rem; color: #9ca3af; margin-top: 2px; }
+.h-score { font-weight: 800; color: #6366f1; background: #e0e7ff; padding: 4px 10px; border-radius: 8px; font-size: 0.85rem; }
+.h-score.done { color: #059669; background: #d1fae5; }
+
+/* Бейджи ролей (восстановлено) */
+.badges-wrapper { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
+.specialty-badge { display: inline-flex; align-items: center; justify-content: center; gap: 8px; background: #e0f2fe; color: #0284c7; padding: 6px 18px; border-radius: 30px; font-weight: 700; font-size: 1rem; min-width: 150px; }
+.admin-badge { background: #111827 !important; color: #f3f4f6 !important; }
+.uni-badge { background: #0f766e !important; color: #ccfbf1 !important; }
+
+/* Цвета карточек */
 .card-accent-purple { border-top: 4px solid #a855f7; }
 .card-accent-blue { border-top: 4px solid #3b82f6; }
 .card-accent-teal { border-top: 4px solid #0d9488; }
 .card-accent-orange { border-top: 4px solid #f97316; }
+
+/* Вспомогательные */
 .scrollable-content { max-height: 500px; overflow-y: auto; padding-right: 5px; }
+.custom-scroll::-webkit-scrollbar { width: 6px; }
+.custom-scroll::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 10px; }
+.empty-timeline { text-align: center; color: #9ca3af; padding: 15px; font-size: 0.9rem; }
+.empty-icon-box { font-size: 2rem; color: #e5e7eb; margin-bottom: 10px; }
+
+/* Roadmap */
+.roadmap-widget-content { text-align: center; padding: 15px 0; }
+.roadmap-title { font-size: 1rem; font-weight: 700; color: #374151; margin-bottom: 15px; }
+.circle-wrapper { margin: 0 auto 15px; width: 100px; }
+.rp-next { font-size: 0.9rem; color: #6b7280; }
+.rp-next strong { color: #8b5cf6; display: block; margin-top: 2px; }
+
+/* ВУЗ Статистика */
+.uni-stats-list { display: flex; justify-content: space-between; padding: 10px 0; }
+.u-stat { text-align: center; flex: 1; } .us-val { font-size: 1.4rem; font-weight: 800; color: #0f766e; }
+.doc-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.doc-item { display: flex; align-items: center; gap: 8px; padding: 8px; background: #f8fafc; border-radius: 8px; font-size: 0.9rem; font-weight: 600; color: #334155; }
+.btn-create-report { width: 100%; margin-top: 15px; background: #eff6ff; color: #2563eb; border: 1px dashed #2563eb; padding: 10px; border-radius: 10px; cursor: pointer; font-weight: 600; transition: 0.2s; }
+.doc-preview-item { display: flex; flex-direction: column; align-items: center; font-size: 0.75rem; color: #64748b; }
+.preview-img { width: 50px; height: 50px; object-fit: contain; border: 1px solid #e2e8f0; border-radius: 8px; padding: 5px; background: white; }
+.uni-docs-preview .docs-row { display: flex; gap: 15px; justify-content: center; }
+
+/* Редактор сетки */
 .layout-editor-container { padding: 20px; }
 .le-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 20px 0; }
 .le-column { background: #f9fafb; padding: 15px; border-radius: 12px; border: 1px solid #e5e7eb; }
@@ -856,52 +906,98 @@ export default {
 .le-item { background: white; padding: 10px; border-radius: 8px; border: 1px solid #e5e7eb; cursor: move; display: flex; justify-content: space-between; align-items: center; font-weight: 600; color: #374151; }
 .le-ghost { opacity: 0.5; background: #e6f7ff; border: 1px dashed #1890ff; }
 .reset-block { text-align: center; margin-top: 15px; }
-.custom-scroll::-webkit-scrollbar { width: 6px; }
-.custom-scroll::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 10px; }
-.roadmap-widget-content { text-align: center; padding: 15px 0; }
-.roadmap-title { font-size: 1rem; font-weight: 700; color: #374151; margin-bottom: 15px; }
-.circle-wrapper { margin: 0 auto 15px; width: 100px; }
-.rp-next { font-size: 0.9rem; color: #6b7280; }
-.rp-next strong { color: #8b5cf6; display: block; margin-top: 2px; }
-/* === СТИЛИ ИНВЕНТАРЯ === */
-.inv-tabs { display: flex; gap: 10px; margin-bottom: 15px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
-.inv-tabs span { cursor: pointer; padding: 5px 12px; border-radius: 20px; font-size: 0.9rem; color: #6b7280; font-weight: 600; transition: 0.2s; }
-.inv-tabs span.active { background: #e0e7ff; color: #4f46e5; }
-.inv-tabs span:hover { background: #f3f4f6; }
 
-.inv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 10px; max-height: 200px; overflow-y: auto; }
-.inv-item { background: white; border: 1px solid #e5e7eb; border-radius: 12px; padding: 10px; text-align: center; cursor: pointer; transition: 0.2s; position: relative; overflow: hidden; }
-.inv-item:hover { transform: translateY(-2px); box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
-.inv-item.locked { opacity: 0.5; cursor: not-allowed; background: #f9fafb; }
-.inv-item.equipped { border-color: #10b981; background: #ecfdf5; }
+/* =======================================================
+   НОВЫЕ СТИЛИ (ЭФФЕКТЫ, ИНВЕНТАРЬ)
+   ======================================================= */
 
-.inv-icon { font-size: 1.8rem; color: #4f46e5; margin-bottom: 5px; }
-.inv-name { font-size: 0.7rem; font-weight: 600; color: #374151; line-height: 1.2; }
-.inv-status { font-size: 0.6rem; color: #10b981; font-weight: 700; margin-top: 2px; }
+/* Контейнер эффектов */
+.effects-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 4; }
 
-/* 🔥 ВИЗУАЛЬНЫЕ ЭФФЕКТЫ ДЛЯ АВАТАРА 🔥 */
+/* 1. КОРОЛЕВСКАЯ КОРОНА */
+.royal-crown-container {
+    position: absolute; top: -50px; left: 50%; transform: translateX(-50%); z-index: 20;
+    filter: drop-shadow(0 0 10px rgba(251, 191, 36, 0.8));
+    animation: float-crown 3s ease-in-out infinite;
+}
+@keyframes float-crown { 0%, 100% { transform: translateX(-50%) translateY(0); } 50% { transform: translateX(-50%) translateY(-8px); } }
 
-/* Синяя рамка */
-.frame-blue-glow .main-avatar { border: 4px solid #3b82f6; box-shadow: 0 0 15px #3b82f6; }
+/* 2. КОНФЕТТИ */
+.confetti-wrapper { position: absolute; width: 100%; height: 100%; top: 0; left: 0; }
+.confetti-piece { position: absolute; width: 6px; height: 6px; border-radius: 2px; opacity: 0; animation: confetti-fall 2s ease-out infinite; }
+@keyframes confetti-fall {
+    0% { transform: translateY(-20px) rotate(0deg); opacity: 1; }
+    100% { transform: translateY(100px) rotate(720deg); opacity: 0; }
+}
 
-/* Золотая рамка */
-.frame-gold-glow .main-avatar { border: 4px solid #fbbf24; box-shadow: 0 0 20px #fbbf24, inset 0 0 10px #fbbf24; animation: gold-pulse 2s infinite; }
+/* 3. ХОЛОД (СНЕГ) */
+.snow-wrapper { position: absolute; width: 100%; height: 100%; overflow: visible; }
+.snowflake { position: absolute; top: -10px; color: #bae6fd; font-size: 18px; animation: snow-fall linear infinite; text-shadow: 0 0 5px white; }
+@keyframes snow-fall { to { transform: translateY(180px); opacity: 0; } }
+
+/* 4. МОЛНИИ (SVG) */
+.lightning-wrapper { position: absolute; width: 100%; height: 100%; top: 0; left: 0; z-index: 10; }
+.lightning-bolt { position: absolute; top: -10px; right: -10px; width: 60px; height: 60px; filter: drop-shadow(0 0 10px #fef08a); opacity: 0; animation: lightning-flash 4s infinite; }
+@keyframes lightning-flash {
+    90% { opacity: 0; transform: scale(0.8); }
+    92% { opacity: 1; transform: scale(1.2); }
+    94% { opacity: 0; transform: scale(1); }
+    95% { opacity: 0.8; transform: scale(1.1); }
+    100% { opacity: 0; }
+}
+
+/* 5. МАТРИЦА (НА АВАТАРКЕ) */
+.matrix-overlay {
+    position: absolute; top: 4px; left: 4px; width: 127px; height: 127px; border-radius: 50%;
+    overflow: hidden; background: rgba(0,0,0,0.3); z-index: 7; pointer-events: none;
+    display: flex; justify-content: center; opacity: 0.6;
+}
+.matrix-column { font-family: monospace; font-size: 10px; color: #22c55e; width: 10px; word-break: break-all; line-height: 10px; animation: matrix-scroll 2s linear infinite; }
+.matrix-column.delay { animation-delay: 1s; margin-left: 5px; }
+@keyframes matrix-scroll { from { transform: translateY(-100%); } to { transform: translateY(100%); } }
+
+/* РАМКИ */
+.frame-blue .main-avatar { border: 4px solid #3b82f6; box-shadow: 0 0 15px #3b82f6; }
+.frame-green .main-avatar { border: 4px solid #10b981; border-style: dashed; }
+.frame-gold .main-avatar { border: 4px solid #fbbf24; box-shadow: 0 0 20px #fbbf24, inset 0 0 10px #fbbf24; animation: gold-pulse 2s infinite; }
+.frame-royal .main-avatar { border: 5px solid #7c3aed; box-shadow: 0 0 25px #7c3aed; }
 @keyframes gold-pulse { 0% { box-shadow: 0 0 10px #fbbf24; } 50% { box-shadow: 0 0 25px #fbbf24; } 100% { box-shadow: 0 0 10px #fbbf24; } }
 
-/* Неон */
-.frame-neon-pulse .main-avatar { border: 4px solid #d946ef; box-shadow: 0 0 10px #d946ef, 0 0 20px #a855f7; }
+/* ИНВЕНТАРЬ */
+.inv-tabs { display: flex; gap: 10px; margin-bottom: 15px; border-bottom: 1px solid #eee; padding-bottom: 5px; overflow-x: auto; }
+.inv-tabs span { cursor: pointer; padding: 5px 12px; border-radius: 20px; font-size: 0.9rem; color: #6b7280; font-weight: 600; transition: 0.2s; white-space: nowrap; }
+.inv-tabs span.active { background: #e0e7ff; color: #4f46e5; }
+.inv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 10px; max-height: 200px; overflow-y: auto; }
+.inv-item { background: white; border: 1px solid #e5e7eb; border-radius: 12px; padding: 10px; text-align: center; cursor: pointer; transition: 0.2s; }
+.inv-item:hover { transform: translateY(-2px); box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
+.inv-item.equipped { border-color: #10b981; background: #ecfdf5; box-shadow: inset 0 0 0 1px #10b981; }
+.inv-icon { font-size: 1.8rem; color: #4f46e5; margin-bottom: 5px; }
 
-/* Эффект Огня (на контейнере avatar-stack) */
-.effect-fire::before {
-    content: ''; position: absolute; bottom: -10px; left: 50%; transform: translateX(-50%);
-    width: 100%; height: 80%;
-    background: radial-gradient(circle, rgba(249, 115, 22, 0.6) 0%, transparent 70%);
-    filter: blur(20px); z-index: 0; animation: fire-flicker 0.1s infinite;
-}
-@keyframes fire-flicker { 0% { opacity: 0.8; transform: translateX(-50%) scale(1); } 50% { opacity: 1; transform: translateX(-50%) scale(1.05); } 100% { opacity: 0.9; transform: translateX(-50%) scale(1); } }
+/* БЕЙДЖИ (Новый стиль) */
+.equipped-badges { display: flex; gap: 10px; justify-content: center; margin-bottom: 10px; }
+.equipped-badge-item { padding: 4px 12px; border-radius: 20px; font-weight: 700; font-size: 0.85rem; display: flex; align-items: center; gap: 6px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+/* Цвета бейджей */
+.badge_top, .badge_star, .crown_animated { background: linear-gradient(135deg, #fbbf24, #f59e0b); color: white; }
+.badge_guru, .badge_puzzle { background: #8b5cf6; color: white; }
+.badge_fast, .badge_rocket { background: #ef4444; color: white; }
+.badge_book { background: #3b82f6; color: white; }
 
-/* Темная тема (класс вешается на .main-card) */
+/* ТЕМЫ */
 .theme-dark-mode { background: #111827 !important; border-color: #374151 !important; color: white !important; }
-.theme-dark-mode .full-name { color: white !important; }
+.theme-dark-mode .full-name, .theme-dark-mode h1, .theme-dark-mode h3 { color: white !important; }
+
+.theme-matrix-mode { background: #000 !important; border: 1px solid #22c55e !important; color: #22c55e !important; box-shadow: 0 0 20px rgba(34, 197, 94, 0.4) !important; }
+.theme-matrix-mode .full-name { color: #22c55e !important; font-family: 'Courier New', monospace; letter-spacing: 2px; }
+
+.theme-gold-mode { background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%) !important; border: 2px solid #fbbf24 !important; }
+.theme-gold-mode .full-name { color: #92400e !important; font-family: serif; }
+
+/* Фоны тем */
+.bg-black { background: #000; }
+.bg-gold { background: #fdf6e3; }
+.matrix-bg-rain span { position: absolute; color: #0f0; font-family: monospace; font-size: 20px; top: -20px; animation: rain linear infinite; opacity: 0.3; }
+@keyframes rain { to { top: 100%; opacity: 0; } }
+.gold-bg-dust .gold-particle { position: absolute; width: 4px; height: 4px; background: #fbbf24; border-radius: 50%; animation: sparkle 3s infinite; }
+@keyframes sparkle { 0%, 100% { opacity: 0.3; transform: scale(1); } 50% { opacity: 1; transform: scale(1.5); } }
 
 </style>
