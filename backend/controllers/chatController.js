@@ -2,7 +2,120 @@ const db = require('../db');
 const aiService = require('../services/aiService');
 const pdf = require('pdf-parse');
 
+const parseAIResponse = (text) => {
+    try {
+        // 1. Попытка распарсить "как есть"
+        return JSON.parse(text);
+    } catch (e) {
+        try {
+            // 2. Очистка от Markdown ```json ... ```
+            let clean = text.replace(/```json/g, '').replace(/```/g, '').trim();
+            // 3. Поиск первой { и последней }
+            const start = clean.indexOf('{');
+            const end = clean.lastIndexOf('}');
+            if (start !== -1 && end !== -1) {
+                clean = clean.substring(start, end + 1);
+                return JSON.parse(clean);
+            }
+        } catch (e2) {
+            console.error("JSON Parse Error:", text);
+            throw new Error("AI вернул некорректный формат данных");
+        }
+    }
+    return null;
+};
+
 class ChatController {
+
+    // --- ВСПОМОГАТЕЛЬНЫЙ МЕТОД: ПЕРЕСЧЕТ XP + НАГРАДЫ ---
+    async _recalcAndSaveXP(userId) {
+        try {
+            let totalXp = 0;
+
+            // 1. Считаем XP из Активных треков (graduates table)
+            const gradRes = await db.query('SELECT xp, roadmap_data, unlocked_rewards FROM graduates WHERE user_id = $1', [userId]);
+            const currentDbXp = gradRes.rows[0]?.xp || 0;
+            const currentRewards = gradRes.rows[0]?.unlocked_rewards || []; // Postgres возвращает массив строк
+            const roadmapData = gradRes.rows[0]?.roadmap_data;
+
+            if (roadmapData && roadmapData.list && Array.isArray(roadmapData.list)) {
+                roadmapData.list.forEach(track => {
+                    if (track.nodes && Array.isArray(track.nodes)) {
+                        track.nodes.forEach(node => {
+                            if (node.subtopics && Array.isArray(node.subtopics)) {
+                                node.subtopics.forEach(sub => {
+                                    if (sub.done) totalXp += (sub.xpEarned || 50);
+                                });
+                            } else if (node.data?.done || node.done) {
+                                totalXp += 50;
+                            }
+                        });
+                    }
+                });
+            }
+
+            // 2. Считаем XP из Архива (roadmap_history table)
+            const historyRes = await db.query('SELECT roadmap_data FROM roadmap_history WHERE user_id = $1', [userId]);
+
+            historyRes.rows.forEach(row => {
+                let nodes = row.roadmap_data;
+                if (typeof nodes === 'string') {
+                    try { nodes = JSON.parse(nodes); } catch(e) { nodes = []; }
+                }
+                if (Array.isArray(nodes)) {
+                    nodes.forEach(node => {
+                        if (node.subtopics && Array.isArray(node.subtopics)) {
+                            node.subtopics.forEach(sub => {
+                                if (sub.done) totalXp += (sub.xpEarned || 50);
+                            });
+                        } else if (node.data?.done || node.done) {
+                            totalXp += 50;
+                        }
+                    });
+                }
+            });
+
+            // 3. ПРОВЕРКА УРОВНЯ И ВЫДАЧА НАГРАД
+            const oldLevel = Math.floor(currentDbXp / 500) + 1;
+            const newLevel = Math.floor(totalXp / 500) + 1;
+
+            let newRewards = [...currentRewards];
+            let rewardGranted = null;
+
+            // Если уровень вырос
+            if (newLevel > oldLevel) {
+                const rewardsMap = {
+                    2:  { id: 'frame_blue', name: '🎨 Синяя рамка аватара' },
+                    3:  { id: 'ai_token', name: '📄 AI-разбор резюме' },
+                    5:  { id: 'fire_effect', name: '🔥 Эффект "В огне"' },
+                    7:  { id: 'profile_boost', name: '🚀 Буст профиля' },
+                    10: { id: 'theme_dark', name: '🕶 Тёмная тема' },
+                    15: { id: 'badge_top', name: '🌟 Бейдж Топ-талант' },
+                    20: { id: 'mentor_status', name: '🎓 Статус Ментора' },
+                    30: { id: 'crown', name: '👑 Корона Guru' }
+                };
+
+                // Проверяем все уровни, которые прошли (вдруг сразу на 2 скакнули)
+                for (let l = oldLevel + 1; l <= newLevel; l++) {
+                    if (rewardsMap[l] && !newRewards.includes(rewardsMap[l].id)) {
+                        newRewards.push(rewardsMap[l].id);
+                        rewardGranted = rewardsMap[l].name; // Запоминаем последнюю полученную для уведомления
+                    }
+                }
+            }
+
+            // 4. Сохраняем в базу
+            await db.query(
+                'UPDATE graduates SET xp = $1, unlocked_rewards = $2 WHERE user_id = $3',
+                [totalXp, newRewards, userId]
+            );
+
+            return { totalXp, newLevel, rewardGranted };
+        } catch (e) {
+            console.error("XP Recalc Error:", e);
+            return { totalXp: 0, newLevel: 1, rewardGranted: null };
+        }
+    }
 
     // Получение истории
     getHistory = async (req, res) => {
@@ -165,74 +278,112 @@ class ChatController {
     generateRoadmap = async (req, res) => {
         try {
             const { role } = req.body;
+            const userId = req.user.id;
             if (!role) return res.status(400).json({ message: "Укажите роль" });
 
             console.log(`🤖 Generating Smart Roadmap for: ${role}...`);
 
+            // 1. Сначала получаем ТЕКУЩИЕ данные, чтобы не стереть их
+            const currentRes = await db.query('SELECT roadmap_data FROM graduates WHERE user_id = $1', [userId]);
+            let currentData = currentRes.rows[0]?.roadmap_data || { list: [], activeId: null };
+
+            // Если вдруг там старый формат (просто массив), конвертируем
+            if (Array.isArray(currentData)) {
+                currentData = { list: [{ id: 'legacy', role: 'Old Roadmap', nodes: currentData }], activeId: 'legacy' };
+            }
+            if (!currentData.list) currentData.list = [];
+
+            // 2. Генерируем новый контент через AI
             const prompt = `
                 Ты — Senior Technical Mentor.
-                Составь подробную карту развития (Roadmap) для профессии: "${role}".
-                
-                СТРУКТУРА:
-                1. Создай 5-7 КЛЮЧЕВЫХ этапов (Main Nodes).
-                2. Для каждого этапа 2-3 подтемы (Subtopics).
-                
-                ОБЯЗАТЕЛЬНО верни данные в формате JSON (массив объектов).
-                Каждый объект (и тема, и подтема) должен содержать:
-                - "label": "Название темы"
-                - "desc": "Краткое описание"
-                - "difficulty": "easy", "medium" или "hard" (оцени сложность для новичка)
-                - "time": "2h", "5h", "1 day" (примерное время на изучение)
-                - "xpEarned": число от 50 до 300 (очки опыта за прохождение)
-                - "resources": массив из 2 полезных ссылок (реальных или сгенерированных ТОЛЬКО ТЕКСТОВЫЕ СТАТЬИ БЕЗ ВИДЕО):
-                    [ { "title": "...", "type": "video" или "article", "link": "..." } ]
-                
-                ТРЕБОВАНИЯ:
-                - Язык: РУССКИЙ.
-                - Технические термины на английском.
-                - Верни ТОЛЬКО валидный JSON.
-
-                Пример структуры:
+                Составь карту развития (Roadmap) для: "${role}".
+                Верни JSON (массив объектов).
+                Структура: 
                 [
-                    { 
-                        "label": "Основы", 
-                        "desc": "...", 
-                        "difficulty": "easy",
-                        "time": "5h",
-                        "xpEarned": 100,
-                        "resources": [],
-                        "subtopics": [ ... ] 
-                    }
+                  { 
+                    "label": "Название этапа", 
+                    "desc": "Кратко", 
+                    "difficulty": "easy/medium/hard",
+                    "subtopics": [ 
+                       { "label": "Подтема", "desc": "Что изучить", "xpEarned": 100 } 
+                    ] 
+                  }
                 ]
+                Только JSON, без лишнего текста.
             `;
+
             const aiResponse = await aiService.getCompletion([{ role: 'user', content: prompt }]);
 
-            // Парсинг JSON
+            // Чистим ответ от ```json ... ```
             let cleanJson = aiResponse.replace(/```json/g, '').replace(/```/g, '').trim();
-            const nodes = JSON.parse(cleanJson);
+            let newNodes = JSON.parse(cleanJson);
 
-            res.json(nodes);
+            // Валидация полей
+            const validateNode = (node) => {
+                if (!node.difficulty) node.difficulty = 'medium';
+                if (!node.subtopics) node.subtopics = [];
+                node.subtopics.forEach(s => {
+                    s.done = false; // Важно: новый трек не пройден
+                    if (!s.xpEarned) s.xpEarned = 50;
+                });
+                node.data = { done: false }; // Совместимость
+            };
+            newNodes.forEach(validateNode);
+
+            // 3. Создаем новый объект трека
+            const newTrackId = `track-${Date.now()}`;
+            const newTrack = {
+                id: newTrackId,
+                role: role,
+                created_at: new Date(),
+                nodes: newNodes
+            };
+
+            // 4. ДОБАВЛЯЕМ в список (а не заменяем)
+            currentData.list.push(newTrack);
+            currentData.activeId = newTrackId; // Переключаем на новый
+
+            // 5. Сохраняем обновленный список
+            await db.query('UPDATE graduates SET roadmap_data = $1 WHERE user_id = $2', [JSON.stringify(currentData), userId]);
+
+            await this._recalcAndSaveXP(userId);
+
+            res.json(currentData); // Возвращаем полный объект
+
         } catch (e) {
-            console.error("Roadmap Gen Error:", e);
-            res.status(500).json({ message: "Ошибка генерации" });
+            console.error("Roadmap Error:", e);
+            res.status(500).json({ message: "Ошибка генерации roadmap" });
         }
     }
 
     // --- QUIZ (ЗАДАЧА) ---
     generateNodeQuiz = async (req, res) => {
         try {
-            const { topic, description } = req.body;
+            const { topic, description } = req.body; // topic = подтема, description = родительская тема
+
             const prompt = `
-                Ты — Интервьюер. Тема: "${topic}" (${description}).
-                Придумай 1 практическую задачу.
-                Верни JSON: { "question": "...", "hint": "..." }
+                Ты технический интервьюер.
+                Родительская тема: "${description}".
+                Конкретная подтема для проверки: "${topic}".
+                
+                Сгенерируй 1 (один) короткий проверочный вопрос или мини-задачу на проверку понимания этой подтемы.
+                
+                Верни ОТВЕТ ТОЛЬКО В ФОРМАТЕ JSON:
+                {
+                    "question": "Текст вопроса...",
+                    "hint": "Маленькая подсказка (не обязательна)"
+                }
             `;
+
             const aiResponse = await aiService.getCompletion([{ role: 'user', content: prompt }]);
-            const clean = aiResponse.replace(/```json/g, '').replace(/```/g, '').trim();
-            const json = JSON.parse(clean.match(/\{[\s\S]*\}/)[0]);
+            const json = parseAIResponse(aiResponse);
+
+            if (!json) return res.status(500).json({ message: "Ошибка генерации вопроса (неверный формат)" });
+
             res.json(json);
         } catch (e) {
-            res.status(500).json({ message: "Ошибка создания теста" });
+            console.error("Quiz Gen Error:", e);
+            res.status(500).json({ message: "Ошибка сервера при создании теста" });
         }
     }
 
@@ -240,68 +391,79 @@ class ChatController {
     checkNodeQuiz = async (req, res) => {
         try {
             const { topic, question, answer } = req.body;
+
             const prompt = `
-                Тема: ${topic}. Вопрос: ${question}. Ответ: "${answer}".
-                Оцени ответ.
-                Верни JSON: { "passed": true/false, "feedback": "Markdown текст...", "score": 85 }
+                Я изучаю тему: "${topic}".
+                Вопрос был: "${question}".
+                Мой ответ: "${answer}".
+                
+                Оцени, правильно ли я ответил. Будь строг, но справедлив.
+                
+                Верни ОТВЕТ ТОЛЬКО В ФОРМАТЕ JSON:
+                {
+                    "passed": true или false,
+                    "feedback": "Краткое объяснение в формате Markdown (почему правильно или нет)",
+                    "score": число от 0 до 100
+                }
             `;
+
             const aiResponse = await aiService.getCompletion([{ role: 'user', content: prompt }]);
-            const clean = aiResponse.replace(/```json/g, '').replace(/```/g, '').trim();
-            const json = JSON.parse(clean.match(/\{[\s\S]*\}/)[0]);
+            const json = parseAIResponse(aiResponse);
+
+            if (!json) return res.status(500).json({ message: "Ошибка проверки (неверный формат)" });
+
             res.json(json);
         } catch (e) {
-            res.status(500).json({ message: "Ошибка проверки" });
+            console.error("Quiz Check Error:", e);
+            res.status(500).json({ message: "Ошибка сервера при проверке" });
         }
     }
 
-    // --- СОХРАНЕНИЕ ---
+    // --- СОХРАНЕНИЕ ROADMAP + ПОДСЧЕТ XP ---
+    // 🔥 ИСПРАВЛЕННОЕ СОХРАНЕНИЕ ПРОГРЕССА
     saveRoadmap = async (req, res) => {
         try {
             const userId = req.user.id;
-            const { roadmapId, nodes, role, activeId } = req.body;
-            // roadmapId - какой трек обновляем (если null -> создаем новый)
-            // activeId - какой трек сделать активным
+            const { activeId, roadmapId, nodes } = req.body;
 
             // Получаем текущие данные
-            const result = await db.query('SELECT roadmap_data FROM graduates WHERE user_id = $1', [userId]);
-            let data = result.rows[0]?.roadmap_data || { activeId: null, list: [] };
+            const currentRes = await db.query('SELECT roadmap_data FROM graduates WHERE user_id = $1', [userId]);
+            let data = currentRes.rows[0]?.roadmap_data;
 
-            // Убедимся, что структура правильная
-            if (!data.list) data = { activeId: null, list: [] };
+            if (!data || !data.list) return res.status(400).json({message: "Нет данных"});
 
-            if (nodes && role) {
-                // Если переданы узлы - значит сохраняем конкретный роадмап
-                const idToSave = roadmapId || require('crypto').randomUUID(); // Генерируем ID если новый
-
-                const existingIndex = data.list.findIndex(item => item.id === idToSave);
-
-                const newTrack = { id: idToSave, role, nodes };
-
-                if (existingIndex !== -1) {
-                    // Обновляем существующий
-                    data.list[existingIndex] = newTrack;
-                } else {
-                    // Добавляем новый
-                    data.list.push(newTrack);
-                }
-
-                // Делаем его активным
-                data.activeId = idToSave;
-            }
-
-            // Если просто переключили вкладку (передан только activeId)
+            // 1. Если просто переключаем вкладку
             if (activeId) {
                 data.activeId = activeId;
             }
 
-            await db.query('UPDATE graduates SET roadmap_data = $1 WHERE user_id = $2', [JSON.stringify(data), userId]);
-            res.json({ message: "Saved", roadmapId: data.activeId });
+            // 2. Если обновляем прогресс конкретного трека
+            if (roadmapId && nodes) {
+                const trackIndex = data.list.findIndex(t => t.id === roadmapId);
+                if (trackIndex !== -1) {
+                    data.list[trackIndex].nodes = nodes;
+                }
+            }
 
+            await db.query('UPDATE graduates SET roadmap_data = $1 WHERE user_id = $2', [JSON.stringify(data), userId]);
+
+            // 🔥 ВАЖНО: Получаем результат пересчета (включая награду)
+            const xpResult = await this._recalcAndSaveXP(userId);
+
+            // 🔥 Отправляем всё на фронт
+            res.json({
+                message: "Saved",
+                totalXp: xpResult.totalXp,
+                newLevel: xpResult.newLevel,
+                rewardGranted: xpResult.rewardGranted
+            });
         } catch (e) {
             console.error(e);
             res.status(500).json({ message: "Error saving" });
         }
     }
+
+
 
     // 1. ПОЛУЧЕНИЕ (С МИГРАЦИЕЙ)
     getRoadmap = async (req, res) => {
@@ -339,47 +501,75 @@ class ChatController {
         }
     }
 
+    // --- АРХИВАЦИЯ (ИСПРАВЛЕННАЯ) ---
     archiveRoadmap = async (req, res) => {
         try {
             const userId = req.user.id;
-            const { roadmapId } = req.body; // ID трека, который архивируем
+            const { roadmapId } = req.body;
 
-            const result = await db.query('SELECT roadmap_data FROM graduates WHERE user_id = $1', [userId]);
-            let data = result.rows[0]?.roadmap_data;
+            // 1. Получаем текущие данные
+            const gradRes = await db.query('SELECT roadmap_data FROM graduates WHERE user_id = $1', [userId]);
+            let currentData = gradRes.rows[0]?.roadmap_data;
 
-            if (!data || !data.list) return res.status(400).json({ message: "Нет данных" });
+            if (!currentData || !currentData.list) return res.status(400).json({ message: "Нет данных" });
 
-            // Находим трек
-            const trackIndex = data.list.findIndex(t => t.id === roadmapId);
+            // 2. Находим нужный трек
+            const trackIndex = currentData.list.findIndex(t => t.id === roadmapId);
             if (trackIndex === -1) return res.status(404).json({ message: "Трек не найден" });
 
-            const track = data.list[trackIndex];
+            const trackToArchive = currentData.list[trackIndex];
 
-            // Рассчитываем прогресс перед архивацией
-            const totalNodes = track.nodes.filter(n => n.type !== 'sub').length; // Примерно
-            const doneNodes = track.nodes.filter(n => n.data && n.data.done).length; // Нужно адаптировать под структуру VueFlow
-            // У тебя структура VueFlow: nodes хранятся плоско.
-            // Проще взять прогресс с фронтенда, но если надо на бэке - считаем done:true
+            // 3. СЧИТАЕМ ПРОГРЕСС ПЕРЕД АРХИВАЦИЕЙ
+            let total = 0;
+            let done = 0;
+            // Пробегаемся по узлам трека
+            if (trackToArchive.nodes) {
+                trackToArchive.nodes.forEach(node => {
+                    if (node.subtopics && node.subtopics.length > 0) {
+                        total += node.subtopics.length;
+                        done += node.subtopics.filter(s => s.done).length;
+                    } else {
+                        total++;
+                        if (node.data?.done || node.done) done++;
+                    }
+                });
+            }
+            // Вычисляем процент (если 0 задач, то 0%)
+            const finalProgress = total === 0 ? 0 : Math.round((done / total) * 100);
 
-            // Сохраняем в историю
+            // 4. Сохраняем в таблицу истории
             await db.query(
-                'INSERT INTO roadmap_history (user_id, role_title, progress, roadmap_data) VALUES ($1, $2, $3, $4)',
-                [userId, track.role, 100, JSON.stringify(track.nodes)] // Progress заглушка, лучше передавать с фронта
+                'INSERT INTO roadmap_history (user_id, role_title, progress, roadmap_data, completed_at) VALUES ($1, $2, $3, $4, NOW())',
+                [
+                    userId,
+                    trackToArchive.role || 'Roadmap',
+                    finalProgress, // <--- ЗАПИСЫВАЕМ РЕАЛЬНЫЙ ПРОГРЕСС
+                    JSON.stringify(trackToArchive.nodes) // Сохраняем узлы, чтобы считать XP потом
+                ]
             );
 
-            // Удаляем из активного списка
-            data.list.splice(trackIndex, 1);
+            // 5. Удаляем из активного списка
+            currentData.list.splice(trackIndex, 1);
 
-            // Если удалили активный - переключаем на первый доступный или null
-            if (data.activeId === roadmapId) {
-                data.activeId = data.list.length > 0 ? data.list[0].id : null;
+            // Если удалили активный, переключаем на последний доступный
+            if (currentData.activeId === roadmapId) {
+                currentData.activeId = currentData.list.length > 0 ? currentData.list[currentData.list.length - 1].id : null;
             }
 
-            await db.query('UPDATE graduates SET roadmap_data = $1 WHERE user_id = $2', [JSON.stringify(data), userId]);
-            res.json({ message: "Archived" });
+            // 6. Обновляем таблицу graduates
+            await db.query('UPDATE graduates SET roadmap_data = $1 WHERE user_id = $2', [JSON.stringify(currentData), userId]);
 
+            const xpResult = await this._recalcAndSaveXP(userId);
+
+            res.json({
+                message: "Archived",
+                progress: finalProgress,
+                totalXp: xpResult.totalXp,
+                newLevel: xpResult.newLevel,
+                rewardGranted: xpResult.rewardGranted
+            });
         } catch (e) {
-            console.error(e);
+            console.error("Archive Error:", e);
             res.status(500).json({ message: "Error archiving" });
         }
     }

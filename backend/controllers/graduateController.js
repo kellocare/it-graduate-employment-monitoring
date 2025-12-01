@@ -16,7 +16,8 @@ class GraduateController {
                         u.city as user_city,
                         u.is_verified,
                         s.code as specialty_code,
-                        s.name as specialty_name
+                        s.name as specialty_name,
+                        g.xp, g.unlocked_rewards, g.equipped_rewards
                  FROM graduates g
                           JOIN users u ON g.user_id = u.id
                           LEFT JOIN specialties s ON g.specialty_id = s.id
@@ -38,6 +39,39 @@ class GraduateController {
         } catch (e) {
             console.error(e);
             res.status(500).json({message: 'Ошибка получения профиля'});
+        }
+    }
+
+    // 🔥 НОВЫЙ МЕТОД: Надеть/Снять предмет
+    async equipReward(req, res) {
+        try {
+            const userId = req.user.id;
+            const { type, itemId } = req.body; // type: 'frame' | 'effect', itemId: 'frame_blue' или null (снять)
+
+            // 1. Получаем текущие настройки
+            const current = await db.query('SELECT equipped_rewards, unlocked_rewards FROM graduates WHERE user_id = $1', [userId]);
+            let equipped = current.rows[0]?.equipped_rewards || {};
+            const unlocked = current.rows[0]?.unlocked_rewards || [];
+
+            // 2. Проверяем, куплен ли предмет (если мы его надеваем)
+            if (itemId && !unlocked.includes(itemId)) {
+                return res.status(403).json({ message: "Этот предмет еще не открыт!" });
+            }
+
+            // 3. Обновляем
+            if (itemId) {
+                equipped[type] = itemId; // Надеваем
+            } else {
+                delete equipped[type]; // Снимаем
+            }
+
+            // 4. Сохраняем
+            await db.query('UPDATE graduates SET equipped_rewards = $1 WHERE user_id = $2', [JSON.stringify(equipped), userId]);
+
+            res.json({ success: true, equipped });
+        } catch (e) {
+            console.error(e);
+            res.status(500).json({ message: "Ошибка сохранения" });
         }
     }
 

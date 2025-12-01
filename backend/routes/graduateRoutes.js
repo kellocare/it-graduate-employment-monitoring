@@ -23,6 +23,7 @@ const upload = multer({ storage: storage });
 
 router.get('/me', authMiddleware, graduateController.getProfile);
 router.put('/me', authMiddleware, graduateController.updateProfile);
+router.post('/equip', authMiddleware, graduateController.equipReward);
 
 // Новый роут для загрузки фото
 // upload.single('avatar') означает, что мы ждем файл в поле с именем "avatar"

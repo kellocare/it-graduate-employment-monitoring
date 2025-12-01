@@ -157,7 +157,7 @@
         </div>
     </div>
 
-    <!-- МОДАЛКА ВАКАНСИИ (ДЕТАЛИ) -->
+    <!-- === МОДАЛКА ВАКАНСИИ (ДЕТАЛИ) === -->
     <a-modal v-model:open="detailVisible" :footer="null" width="700px" centered class="custom-modal">
        <div v-if="selectedVacancy" class="modal-inner">
           <div class="modal-head">
@@ -165,6 +165,7 @@
             <div class="company-badge">{{ selectedVacancy.company_name }}</div>
           </div>
 
+          <!-- AI Мнение -->
           <div class="ai-box" v-if="selectedVacancy.ai_summary">
             <div class="ai-label"><robot-filled /> Мнение ИИ</div>
             <p>{{ selectedVacancy.ai_summary }}</p>
@@ -182,9 +183,27 @@
             <p class="desc-full">{{ selectedVacancy.description }}</p>
           </div>
 
-          <div class="modal-actions">
-            <!-- КНОПКА ОТКЛИКА (ЗАПУСКАЕТ ТЕСТ) -->
-            <a-button v-if="user && user.role === 'graduate'" type="primary" size="large" block @click="startFromDetail(selectedVacancy.id)">
+          <!-- 🔥 ДЕЙСТВИЯ В МОДАЛКЕ -->
+          <div class="modal-actions-row">
+            <!-- 1. КНОПКА СОЗДАНИЯ РОАДМАПА (ДЛЯ СТУДЕНТА) -->
+            <a-button
+                v-if="user && user.role === 'graduate'"
+                class="btn-roadmap"
+                :loading="roadmapLoading"
+                @click="createRoadmapForVacancy(selectedVacancy)"
+            >
+                <template #icon><compass-outlined /></template>
+                Создать Roadmap
+            </a-button>
+
+            <!-- 2. КНОПКА ОТКЛИКА -->
+            <a-button
+                v-if="user && user.role === 'graduate'"
+                type="primary"
+                size="large"
+                class="btn-respond-main"
+                @click="startFromDetail(selectedVacancy.id)"
+            >
               Откликнуться
             </a-button>
           </div>
@@ -198,7 +217,7 @@
       @close="selectedCompanyId = null"
     />
 
-    <!-- === МОДАЛКА ТЕСТОВОГО ЗАДАНИЯ (ВОЗВРАЩЕНО!) === -->
+    <!-- === МОДАЛКА ТЕСТОВОГО ЗАДАНИЯ === -->
     <a-modal v-model:open="showTestModal" :footer="null" width="650px" :maskClosable="false" centered>
       <div class="test-modal-content">
         <!-- Сценарий 1: Загрузка -->
@@ -264,6 +283,7 @@
 </template>
 
 <script>
+import { useRouter } from 'vue-router';
 import api from '../axios';
 import { message } from 'ant-design-vue';
 import CompanyDetailsModal from '../components/CompanyDetailsModal.vue';
@@ -273,7 +293,7 @@ import {
   DollarOutlined, PlusOutlined, CloseOutlined, RobotFilled, LoadingOutlined,
   ThunderboltFilled, BankOutlined, ArrowRightOutlined, BankFilled,
   EnvironmentOutlined, TeamOutlined, RobotOutlined, FormOutlined,
-  CheckCircleFilled, CloseCircleFilled
+  CheckCircleFilled, CloseCircleFilled, CompassOutlined // 🔥
 } from '@ant-design/icons-vue';
 
 export default {
@@ -283,7 +303,7 @@ export default {
     DollarOutlined, PlusOutlined, CloseOutlined, RobotFilled, LoadingOutlined,
     ThunderboltFilled, BankOutlined, ArrowRightOutlined, BankFilled,
     EnvironmentOutlined, TeamOutlined, RobotOutlined, FormOutlined,
-    CheckCircleFilled, CloseCircleFilled
+    CheckCircleFilled, CloseCircleFilled, CompassOutlined
   },
   data() {
     return {
@@ -294,6 +314,7 @@ export default {
       companiesList: [],
       loading: true,
       aiLoading: false,
+      roadmapLoading: false, // 🔥
       showCreateForm: false,
       employersCompany: null,
       sortBy: 'date_desc',
@@ -331,6 +352,10 @@ export default {
         return list;
     }
   },
+  setup() {
+      const router = useRouter(); // 🔥 Добавили router
+      return { router };
+  },
   async mounted() {
     const userData = localStorage.getItem('user');
     if (userData) {
@@ -364,7 +389,37 @@ export default {
 
     showDetails(v) { this.selectedVacancy = v; this.detailVisible = true; },
 
-    // ЗАПУСК ТЕСТА (ИЗ ДЕТАЛЕЙ)
+    // 🔥 ГЕНЕРАЦИЯ РОАДМАПА ПО ВАКАНСИИ
+    async createRoadmapForVacancy(vacancy) {
+        this.roadmapLoading = true;
+        const skillsStr = vacancy.skills ? vacancy.skills.join(', ') : '';
+        // Формируем запрос для ИИ
+        const roleTitle = `${vacancy.title} (Skills: ${skillsStr})`;
+
+        try {
+            // 1. Генерируем узлы (ИИ)
+            const r = await api.post('/chat/roadmap', { role: roleTitle });
+
+            // 2. Сохраняем в профиль студента
+            await api.post('/chat/roadmap/save', {
+                roadmapData: r.data, // Узлы
+                role: vacancy.title, // Название вакансии как имя трека
+                nodes: r.data // Для надежности (бэк иногда ждет nodes)
+            });
+
+            message.success('План обучения создан!');
+            this.detailVisible = false;
+
+            // 3. Переходим на страницу Roadmaps
+            this.router.push('/roadmap');
+        } catch (e) {
+            message.error('Ошибка генерации roadmap');
+            console.error(e);
+        } finally {
+            this.roadmapLoading = false;
+        }
+    },
+
     startFromDetail(id) {
         this.detailVisible = false;
         this.startApplication(id);
@@ -382,7 +437,6 @@ export default {
         finally { this.aiLoading = false; }
     },
 
-    // --- ЛОГИКА ТЕСТИРОВАНИЯ ---
     async startApplication(vacancyId) {
       this.showTestModal = true;
       this.testLoading = true;
@@ -539,4 +593,10 @@ export default {
 .info-block { margin-bottom: 20px; }
 .info-block h4 { font-size: 1.1rem; border-bottom: 1px solid #e5e7eb; padding-bottom: 5px; margin-bottom: 10px; }
 .skill-pill.large { font-size: 0.9rem; padding: 6px 12px; background: #e0e7ff; color: #4338ca; }
+
+/* 🔥 КНОПКИ В МОДАЛКЕ */
+.modal-actions-row { display: flex; gap: 15px; margin-top: 30px; }
+.btn-roadmap { background: linear-gradient(135deg, #8b5cf6, #d946ef); color: white; border: none; flex: 1; height: 45px; border-radius: 10px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: 0.2s; box-shadow: 0 4px 15px rgba(139, 92, 246, 0.3); }
+.btn-roadmap:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(139, 92, 246, 0.4); }
+.btn-respond-main { flex: 1.5; height: 45px; border-radius: 10px; font-weight: 700; }
 </style>
