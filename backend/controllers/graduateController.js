@@ -81,49 +81,54 @@ class GraduateController {
             const userId = req.user.id;
             const {
                 first_name, last_name, middle_name,
-                patronymic, // Новое поле с фронта
+                patronymic,
                 graduation_year,
                 portfolio_links,
                 specialty_id, about_me, phone, city, telegram,
-                birth_date, gender, education_level, faculty
+                birth_date, gender, education_level, faculty,
+                equipped_rewards // <--- ДОБАВИЛИ ПОЛУЧЕНИЕ НАГРАД
             } = req.body;
 
             const linksJson = typeof portfolio_links === 'string'
                 ? portfolio_links
                 : JSON.stringify(portfolio_links || []);
 
-            // Приоритет: patronymic (новое) -> middle_name (старое)
+            // Обработка наград (бейджей и прочего)
+            // Если пришло null/undefined, отправляем null, чтобы сработал COALESCE в SQL и не затер данные
+            const rewardsJson = equipped_rewards ? (typeof equipped_rewards === 'string' ? equipped_rewards : JSON.stringify(equipped_rewards)) : null;
+
             const finalPatronymic = patronymic || middle_name;
 
-            // 1. Обновляем таблицу USERS
+            // 1. Обновляем таблицу USERS (используем COALESCE, чтобы не затирать данные null-ами)
             await db.query(`
                 UPDATE users
-                SET phone      = $1,
-                    telegram   = $2,
-                    city       = $3,
-                    gender     = $4,
-                    birth_date = $5,
-                    patronymic = $6
+                SET phone      = COALESCE($1, phone),
+                    telegram   = COALESCE($2, telegram),
+                    city       = COALESCE($3, city),
+                    gender     = COALESCE($4, gender),
+                    birth_date = COALESCE($5, birth_date),
+                    patronymic = COALESCE($6, patronymic)
                 WHERE id = $7
             `, [phone, telegram, city, gender, birth_date, finalPatronymic, userId]);
 
             // 2. Обновляем таблицу GRADUATES
-            // ИСПРАВЛЕНИЕ: Нумерация параметров теперь последовательная ($1 ... $12)
-            // Поле education_level пока не пишем, если колонки нет в БД, иначе раскомментируйте
+            // Добавили COALESCE($param, column_name) — это значит "Если пришел NULL, оставь старое значение"
+            // Добавили поле equipped_rewards ($13)
 
             const updatedProfile = await db.query(
                 `UPDATE graduates
-                 SET first_name      = $1,
-                     last_name       = $2,
-                     middle_name     = $3,
-                     graduation_year = $4,
-                     portfolio_links = $5,
-                     specialty_id    = $6,
-                     about_me        = $7,
-                     city            = $8,
-                     phone           = $9,
-                     telegram        = $10,
-                     faculty         = $11
+                 SET first_name       = COALESCE($1, first_name),
+                     last_name        = COALESCE($2, last_name),
+                     middle_name      = COALESCE($3, middle_name),
+                     graduation_year  = COALESCE($4, graduation_year),
+                     portfolio_links  = COALESCE($5, portfolio_links),
+                     specialty_id     = COALESCE($6, specialty_id),
+                     about_me         = COALESCE($7, about_me),
+                     city             = COALESCE($8, city),
+                     phone            = COALESCE($9, phone),
+                     telegram         = COALESCE($10, telegram),
+                     faculty          = COALESCE($11, faculty),
+                     equipped_rewards = COALESCE($13, equipped_rewards) 
                  WHERE user_id = $12 RETURNING *`,
                 [
                     first_name,      // $1
@@ -137,22 +142,21 @@ class GraduateController {
                     phone,           // $9
                     telegram,        // $10
                     faculty,         // $11
-                    userId           // $12
+                    userId,          // $12
+                    rewardsJson      // $13 <--- НОВЫЙ ПАРАМЕТР ДЛЯ СОХРАНЕНИЯ БЕЙДЖЕЙ
                 ]
             );
 
-            // Если обновилось успешно
             if (updatedProfile.rows.length > 0) {
                 res.json({
                     ...updatedProfile.rows[0],
                     gender,
                     birth_date,
                     patronymic: finalPatronymic,
-                    education_level, // Возвращаем обратно, чтобы фронт не сбрасывал, даже если в БД не сохранили
+                    education_level,
                     email: req.user.email
                 });
             } else {
-                // Если записи в graduates не было (редкий кейс, но возможен при ручном создании юзера)
                 res.status(404).json({message: 'Запись выпускника не найдена'});
             }
 
