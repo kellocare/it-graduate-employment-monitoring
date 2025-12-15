@@ -15,18 +15,35 @@
         <h2>База Данных</h2>
         <p>Введите ключ доступа для прямого управления реестром.</p>
 
-        <a-form layout="vertical" class="auth-form">
-          <a-form-item>
-            <a-input v-model:value="dbAuth.username" placeholder="Пользователь БД" size="large">
+        <a-form layout="vertical" class="auth-form" ref="authFormRef" :model="dbAuth" :rules="authRules">
+          <a-form-item name="username" has-feedback>
+            <a-input
+              v-model:value="dbAuth.username"
+              placeholder="Пользователь БД"
+              size="large"
+              @keyup.enter="connectToDb"
+            >
               <template #prefix><user-outlined style="color: #9ca3af" /></template>
             </a-input>
           </a-form-item>
-          <a-form-item>
-            <a-input-password v-model:value="dbAuth.password" placeholder="Пароль доступа" size="large">
+          <a-form-item name="password" has-feedback>
+            <a-input-password
+              v-model:value="dbAuth.password"
+              placeholder="Пароль доступа"
+              size="large"
+              @keyup.enter="connectToDb"
+            >
               <template #prefix><lock-outlined style="color: #9ca3af" /></template>
             </a-input-password>
           </a-form-item>
-          <a-button type="primary" size="large" block :loading="authLoading" @click="connectToDb" class="btn-connect">
+          <a-button
+            type="primary"
+            size="large"
+            block
+            :loading="authLoading"
+            @click="connectToDb"
+            class="btn-connect"
+          >
             Подключиться
           </a-button>
         </a-form>
@@ -173,7 +190,7 @@
         </div>
 
         <!-- Форма -->
-        <a-form layout="vertical" class="edit-form-scroll">
+        <a-form layout="vertical" class="edit-form-scroll" ref="editFormRef" :model="editForm" :rules="editRules">
           <a-row :gutter="16">
             <a-col :span="24" v-for="(val, key) in editForm" :key="key">
                <template v-if="!isSystemField(key)">
@@ -186,7 +203,12 @@
                   </a-form-item>
 
                   <!-- TextArea -->
-                  <a-form-item v-else-if="isTextArea(key, val)" :label="formatLabel(key)" class="styled-form-item">
+                  <a-form-item
+                    v-else-if="isTextArea(key, val)"
+                    :label="formatLabel(key)"
+                    class="styled-form-item"
+                    :name="key"
+                  >
                      <a-textarea v-model:value="editForm[key]" :rows="4" class="custom-input" />
                   </a-form-item>
 
@@ -198,7 +220,13 @@
                   </a-form-item>
 
                   <!-- Standard Input -->
-                  <a-form-item v-else :label="formatLabel(key)" class="styled-form-item">
+                  <a-form-item
+                    v-else
+                    :label="formatLabel(key)"
+                    class="styled-form-item"
+                    :name="key"
+                    :rules="getFieldRules(key, val)"
+                  >
                      <a-input v-model:value="editForm[key]" class="custom-input" size="large" />
                   </a-form-item>
                </template>
@@ -220,7 +248,7 @@
 </template>
 
 <script>
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import api from '../../axios';
 import { message } from 'ant-design-vue';
 import {
@@ -230,7 +258,7 @@ import {
   StarOutlined, TagsOutlined, HistoryOutlined, BellOutlined,
   SafetyCertificateOutlined, IdcardOutlined, SolutionOutlined,
   DatabaseFilled, LockOutlined, LogoutOutlined, TableOutlined, BarsOutlined,
-  FilePdfOutlined, SaveOutlined
+  FilePdfOutlined, SaveOutlined, CheckCircleOutlined
 } from '@ant-design/icons-vue';
 
 export default {
@@ -241,13 +269,37 @@ export default {
     StarOutlined, TagsOutlined, HistoryOutlined, BellOutlined,
     SafetyCertificateOutlined, IdcardOutlined, SolutionOutlined,
     DatabaseFilled, LockOutlined, LogoutOutlined, TableOutlined, BarsOutlined,
-    FilePdfOutlined, SaveOutlined
+    FilePdfOutlined, SaveOutlined, CheckCircleOutlined
   },
   setup() {
     // --- AUTH ---
     const isDbAuthenticated = ref(false);
     const dbAuth = ref({ username: '', password: '' });
     const authLoading = ref(false);
+    const authFormRef = ref();
+
+    // Правила валидации для формы авторизации
+    const authRules = {
+      username: [
+        { required: true, message: 'Введите имя пользователя БД', trigger: 'blur' },
+        { min: 2, message: 'Минимум 2 символа', trigger: 'blur' },
+        {
+          validator: (rule, value) => {
+            // Запрет на подключение под root-пользователями
+            const restrictedUsers = ['root', 'postgres', 'admin'];
+            if (restrictedUsers.includes(value?.toLowerCase())) {
+              return Promise.reject('Невозможно подключиться к суперпользователю');
+            }
+            return Promise.resolve();
+          },
+          trigger: 'blur'
+        }
+      ],
+      password: [
+        { required: true, message: 'Введите пароль', trigger: 'blur' },
+        { min: 1, message: 'Пароль не может быть пустым', trigger: 'blur' }
+      ]
+    };
 
     // --- DATA ---
     const currentTable = ref('users');
@@ -259,6 +311,22 @@ export default {
     const editModalVisible = ref(false);
     const editForm = ref({});
     const saveLoading = ref(false);
+    const editFormRef = ref();
+
+    // Правила валидации для формы редактирования
+    const editRules = {
+      email: [
+        { required: true, message: 'Введите email', trigger: 'blur' },
+        { type: 'email', message: 'Некорректный email', trigger: 'blur' }
+      ],
+      name: [
+        { required: true, message: 'Введите имя', trigger: 'blur' },
+        { min: 2, message: 'Минимум 2 символа', trigger: 'blur' }
+      ],
+      status: [
+        { required: true, message: 'Выберите статус', trigger: 'change' }
+      ]
+    };
 
     // Список таблиц
     const tablesList = [
@@ -286,23 +354,50 @@ export default {
 
     // --- METHODS ---
     const connectToDb = async () => {
-      authLoading.value = true;
-      setTimeout(() => {
-          if(dbAuth.value.username) {
-              isDbAuthenticated.value = true;
-              message.success('Соединение установлено');
-              loadTableData();
-          } else {
-              message.error('Введите данные для входа');
+      try {
+        // Валидация формы перед отправкой
+        await authFormRef.value.validate();
+
+        authLoading.value = true;
+
+        // Имитация запроса к API (в реальном проекте здесь будет вызов API)
+        setTimeout(() => {
+          // Проверка валидности данных (в реальном проекте это делается на сервере)
+          if (!dbAuth.value.username || !dbAuth.value.password) {
+            message.error('Введите данные для входа');
+            authLoading.value = false;
+            return;
           }
+
+          // Проверка на root-пользователей (дополнительная проверка на клиенте)
+          const restrictedUsers = ['root', 'postgres', 'admin'];
+          if (restrictedUsers.includes(dbAuth.value.username.toLowerCase())) {
+            message.error('Невозможно подключиться к суперпользователю');
+            authLoading.value = false;
+            return;
+          }
+
+          // Имитация успешного подключения
+          // В реальном проекте здесь будет:
+          // const response = await api.post('/admin/connect', dbAuth.value);
+          // if (response.data.success) { ... }
+
+          isDbAuthenticated.value = true;
+          message.success('Соединение установлено');
+          loadTableData();
           authLoading.value = false;
-      }, 800);
+        }, 800);
+      } catch (error) {
+        // Ошибки валидации уже отображены в форме
+        authLoading.value = false;
+      }
     };
 
     const disconnectDb = () => {
         isDbAuthenticated.value = false;
         dbAuth.value = { username: '', password: '' };
         data.value = [];
+        message.info('Отключено от базы данных');
     };
 
     const loadTableData = async () => {
@@ -333,6 +428,10 @@ export default {
     };
 
     const saveRecord = async () => {
+      try {
+        // Валидация формы перед сохранением
+        await editFormRef.value.validate();
+
         saveLoading.value = true;
         try {
             const res = await api.put(`/admin/tables/${currentTable.value}/${editForm.value.id}`, editForm.value);
@@ -347,6 +446,62 @@ export default {
         } finally {
             saveLoading.value = false;
         }
+      } catch (error) {
+        // Ошибки валидации уже отображены в форме
+      }
+    };
+
+    // Динамические правила валидации для полей
+    const getFieldRules = (key, value) => {
+      const rules = [];
+
+      // Обязательные поля в зависимости от таблицы
+      if (currentTable.value === 'users') {
+        if (key === 'email') {
+          rules.push({ required: true, message: 'Email обязателен', trigger: 'blur' });
+          rules.push({ type: 'email', message: 'Некорректный email', trigger: 'blur' });
+        }
+        if (key === 'role') {
+          rules.push({ required: true, message: 'Роль обязательна', trigger: 'change' });
+        }
+      }
+
+      if (currentTable.value === 'graduates') {
+        if (key === 'full_name') {
+          rules.push({ required: true, message: 'ФИО обязательно', trigger: 'blur' });
+        }
+        if (key === 'graduation_year') {
+          rules.push({
+            validator: (rule, val) => {
+              const year = parseInt(val);
+              const currentYear = new Date().getFullYear();
+              if (isNaN(year) || year < 2000 || year > currentYear + 5) {
+                return Promise.reject('Некорректный год выпуска');
+              }
+              return Promise.resolve();
+            },
+            trigger: 'blur'
+          });
+        }
+      }
+
+      // Проверка на уникальность email
+      if (key === 'email') {
+        rules.push({
+          validator: (rule, val) => {
+            if (!val) return Promise.resolve();
+            // Проверка формата email
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(val)) {
+              return Promise.reject('Некорректный формат email');
+            }
+            return Promise.resolve();
+          },
+          trigger: 'blur'
+        });
+      }
+
+      return rules;
     };
 
     // --- COMPUTED & HELPERS ---
@@ -387,7 +542,8 @@ export default {
       currentTable, tablesList, data, columns, loading, filteredData, searchText,
       editModalVisible, editForm, saveLoading, openEditModal, saveRecord,
       loadTableData, deleteRecord, copyId, formatDate, isDateKey, formatLabel,
-      isSystemField, isTextArea, isLongText
+      isSystemField, isTextArea, isLongText, authFormRef, editFormRef,
+      authRules, editRules, getFieldRules
     };
   }
 }
@@ -494,4 +650,14 @@ export default {
 .modal-footer-custom { padding: 20px 30px; background: #fff; border-top: 1px solid #f3f4f6; border-radius: 0 0 24px 24px; display: flex; justify-content: flex-end; gap: 12px; }
 .btn-save { background: #7c3aed; border-color: #7c3aed; border-radius: 10px; font-weight: 600; }
 .btn-cancel { border-radius: 10px; color: #6b7280; }
+
+/* Валидация */
+:deep(.ant-form-item-has-error .ant-input) {
+  border-color: #ff4d4f !important;
+}
+:deep(.ant-form-item-explain-error) {
+  color: #ff4d4f;
+  font-size: 12px;
+  margin-top: 4px;
+}
 </style>
