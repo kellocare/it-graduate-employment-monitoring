@@ -1,0 +1,57 @@
+// Use Case Diagram for Coursework
+digraph UseCaseDiagram {
+	dpi=300 rankdir=LR size="10,8"
+	node [fontname=Arial fontsize=12]
+	node [color="#1565C0" fillcolor="#E3F2FD" shape=box style=filled]
+	Grad [label="<<Actor>>
+Выпускник"]
+	Rec [label="<<Actor>>
+Рекрутер"]
+	Staff [label="<<Actor>>
+Сотрудник Вуза"]
+	Admin [label="<<Actor>>
+Администратор"]
+	subgraph cluster_System {
+		fontsize=16 label="Веб-приложение Мониторинга (Vue 3 + Node.js)" style=rounded
+		node [color=black fillcolor=white shape=ellipse style=solid]
+		Auth [label="Авторизация / Вход"]
+		Profile [label="Редактировать профиль
+(Загрузка файлов)"]
+		Roadmap [label="Управлять Roadmap
+(Drag-and-Drop)"]
+		Jobs [label="Просмотр вакансий
+(AI Рекомендации)"]
+		PDF [label="Скачать резюме (PDF)"]
+		XP [label="Получать награды (XP)"]
+		PostJob [label="Публикация вакансий"]
+		Search [label="Поиск кандидатов
+(AI Summary)"]
+		Chat [label="Чат с кандидатом"]
+		Analytics [label="Просмотр аналитики
+(Chart.js)"]
+		Export [label="Экспорт отчетов"]
+		Manage [label="Управление
+пользователями"]
+		Dicts [label="Ведение справочников"]
+		Logs [label="Аудит логов"]
+	}
+	Grad -> Auth
+	Grad -> Profile
+	Grad -> Roadmap
+	Grad -> Jobs
+	Grad -> PDF
+	Grad -> XP
+	Rec -> Auth
+	Rec -> PostJob
+	Rec -> Search
+	Rec -> Chat
+	Staff -> Auth
+	Staff -> Analytics
+	Staff -> Export
+	Admin -> Auth
+	Admin -> Manage
+	Admin -> Dicts
+	Admin -> Logs
+	Jobs -> Profile [label=<<include>> style=dashed]
+	Search -> Chat [label=<<extend>> style=dashed]
+}
